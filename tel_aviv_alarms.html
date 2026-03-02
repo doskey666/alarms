@@ -121,29 +121,48 @@
         .view-section.active {
             display: block;
         }
-        .stats-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 15px;
+        .stats-table-container {
             margin-bottom: 25px;
+            overflow-x: auto;
         }
-        .stat-card {
-            background: rgba(255,255,255,0.1);
+        .stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(255,255,255,0.05);
             border-radius: 15px;
-            padding: 15px;
+            overflow: hidden;
+        }
+        .stats-table th,
+        .stats-table td {
+            padding: 12px 20px;
             text-align: center;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.1);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
         }
-        .stat-value {
-            font-size: 2.2em;
+        .stats-table th {
+            background: rgba(255,255,255,0.1);
             font-weight: bold;
-            color: #e74c3c;
+            color: #fff;
         }
-        .stat-label {
-            color: #aaa;
-            margin-top: 5px;
+        .stats-table td {
+            font-size: 1.4em;
+            font-weight: bold;
+        }
+        .stats-table tr:last-child td {
+            border-bottom: none;
+            background: rgba(255,255,255,0.05);
+        }
+        .stats-table .day-label {
+            font-weight: normal;
             font-size: 0.9em;
+            color: #aaa;
+        }
+        .stats-table .color-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+            margin-left: 8px;
+            vertical-align: middle;
         }
         .chart-container {
             background: rgba(255,255,255,0.05);
@@ -1698,7 +1717,7 @@
 
         <!-- BARRAGES VIEW -->
         <div id="barrages-view" class="view-section active">
-            <div class="stats-row" id="barrageStats"></div>
+            <div class="stats-table-container" id="barrageStats"></div>
 
             <div class="chart-container">
                 <h2 class="chart-title">התפלגות שעתית - כל הימים (מוערם) | Hourly Distribution - All Days (Stacked)</h2>
@@ -1714,7 +1733,7 @@
 
         <!-- ALARMS VIEW -->
         <div id="alarms-view" class="view-section">
-            <div class="stats-row" id="alarmStats"></div>
+            <div class="stats-table-container" id="alarmStats"></div>
 
             <div class="chart-container">
                 <h2 class="chart-title">התפלגות שעתית - כל הימים (מוערם) | Hourly Distribution - All Days (Stacked)</h2>
@@ -1921,22 +1940,38 @@
         }
 
         function updateStats(type, data, labelHe, labelEn) {
-            let html = '';
             let total = 0;
+            let rows = '';
             days.forEach((day, i) => {
                 const sum = data[day].reduce((a, b) => a + b, 0);
                 total += sum;
-                html += `
-                    <div class="stat-card">
-                        <div class="stat-value" style="color: ${colors[i]}">${sum}</div>
-                        <div class="stat-label">${dayNamesHe[i]}</div>
-                    </div>`;
+                rows += `
+                    <tr>
+                        <td><span class="color-indicator" style="background: ${colors[i]}"></span> ${dayNamesHe[i]}</td>
+                        <td class="day-label">${dayNames[i]}</td>
+                        <td style="color: ${colors[i]}">${sum}</td>
+                    </tr>`;
             });
-            html += `
-                <div class="stat-card">
-                    <div class="stat-value" style="color: #ffa502;">${total}</div>
-                    <div class="stat-label">סה"כ ${labelHe} | Total ${labelEn}</div>
-                </div>`;
+            rows += `
+                <tr>
+                    <td><strong>סה"כ</strong></td>
+                    <td class="day-label"><strong>Total</strong></td>
+                    <td style="color: #ffa502"><strong>${total}</strong></td>
+                </tr>`;
+
+            const html = `
+                <table class="stats-table">
+                    <thead>
+                        <tr>
+                            <th>יום</th>
+                            <th>Day</th>
+                            <th>${labelHe} / ${labelEn}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>`;
             document.getElementById(type + 'Stats').innerHTML = html;
         }
 
