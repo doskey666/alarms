@@ -521,6 +521,22 @@ html_content += '''                </select>
         let barrageDayCharts = [];
         let alarmDayCharts = [];
 
+        // URL parameter handling
+        function getUrlParam(param) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(param);
+        }
+
+        function setUrlParam(param, value) {
+            const url = new URL(window.location);
+            if (value && value !== '__total__') {
+                url.searchParams.set(param, value);
+            } else {
+                url.searchParams.delete(param);
+            }
+            window.history.replaceState({}, '', url);
+        }
+
         // Initialize Select2
         $(document).ready(function() {
             $('#citySelect').select2({
@@ -530,12 +546,22 @@ html_content += '''                </select>
             });
 
             $('#citySelect').on('change', function() {
-                updateCharts(this.value);
+                const city = this.value;
+                setUrlParam('city', city);
+                updateCharts(city);
             });
 
             // Initial render
             initCharts();
-            updateCharts('__total__');
+
+            // Check URL for city parameter
+            const urlCity = getUrlParam('city');
+            if (urlCity && cityData[urlCity]) {
+                $('#citySelect').val(urlCity).trigger('change.select2');
+                updateCharts(urlCity);
+            } else {
+                updateCharts('__total__');
+            }
         });
 
         function showView(view) {
