@@ -1,0 +1,14 @@
+# Data files (downloaded at runtime)
+alarms.csv
+
+# Backup files
+*.bck.html
+*_bck.html
+tel_aviv_alarms_bck.html
+
+# Python
+__pycache__/
+*.pyc
+
+# OS files
+.DS_Store

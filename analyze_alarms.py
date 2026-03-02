@@ -6,15 +6,25 @@ Creates HTML visualization of hourly histogram for Tel Aviv alarms
 
 import csv
 import json
+import urllib.request
+import io
 from collections import defaultdict
 from datetime import datetime
 
-# Read the CSV file
+# Download the CSV file from GitHub
+CSV_URL = 'https://raw.githubusercontent.com/yuval-harpaz/alarms/refs/heads/master/data/alarms.csv'
+print(f"Downloading alarms data from {CSV_URL}...")
+
+with urllib.request.urlopen(CSV_URL) as response:
+    csv_data = response.read().decode('utf-8')
+
+print(f"Downloaded {len(csv_data)} bytes")
+
+# Parse the CSV data
 alarms = []
-with open('alarms.csv', 'r', encoding='utf-8') as f:
-    reader = csv.DictReader(f)
-    for row in reader:
-        alarms.append(row)
+reader = csv.DictReader(io.StringIO(csv_data))
+for row in reader:
+    alarms.append(row)
 
 # Filter for war period (2026-02-28 onwards)
 war_start = datetime(2026, 2, 28)
@@ -745,7 +755,7 @@ html_content += '''                </select>
 '''
 
 # Write HTML file
-with open('tel_aviv_alarms.html', 'w', encoding='utf-8') as f:
+with open('index.html', 'w', encoding='utf-8') as f:
     f.write(html_content)
 
-print("\n✓ HTML file generated: tel_aviv_alarms.html")
+print("\n✓ HTML file generated: index.html")
