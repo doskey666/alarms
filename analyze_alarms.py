@@ -30,9 +30,55 @@ for alarm in alarms:
 
 print(f"Total alarms during war period: {len(war_alarms)}")
 
-# Get all unique cities
-all_cities = sorted(set(a['cities'] for a in war_alarms))
-print(f"Unique cities: {len(all_cities)}")
+# Get all unique locations
+all_locations = sorted(set(a['cities'] for a in war_alarms))
+print(f"Unique locations: {len(all_locations)}")
+
+import re
+
+def extract_main_city(location):
+    """Extract the main city name from a location string."""
+    original = location
+
+    # Remove quotes if present
+    location = location.strip('"').strip()
+
+    # Skip "אזור תעשייה" locations - extract city name if possible
+    if location.startswith('אזור תעשייה'):
+        # Try to find a known city in the rest of the string
+        rest = location.replace('אזור תעשייה', '').strip()
+        # Return the industrial zone as-is for now, or extract city
+        return location  # Keep industrial zones separate
+
+    # Handle dash-separated names (e.g., "תל אביב - מרכז העיר")
+    if ' - ' in location:
+        return location.split(' - ')[0].strip()
+    if ' -' in location:
+        return location.split(' -')[0].strip()
+    if '- ' in location:
+        return location.split('- ')[0].strip()
+
+    # Handle direction/area suffixes (without dash)
+    suffixes = [
+        ' מזרח', ' מערב', ' צפון', ' דרום', ' מרכז',
+        ' א', ' ב', ' ג', ' ד', ' ה', ' ו', ' ז', ' ח', ' ט', ' י', ' יא', ' יב',
+        ' עילית', ' תחתית',
+    ]
+    for suffix in suffixes:
+        if location.endswith(suffix):
+            return location[:-len(suffix)].strip()
+
+    return location
+
+# Group locations by main city
+city_to_locations = defaultdict(set)
+for loc in all_locations:
+    main_city = extract_main_city(loc)
+    city_to_locations[main_city].add(loc)
+
+# Get unique main cities
+main_cities = sorted(city_to_locations.keys())
+print(f"Unique main cities (grouped): {len(main_cities)}")
 
 # Group by day
 all_days = ['2026-02-28', '2026-03-01', '2026-03-02', '2026-03-03']
@@ -43,10 +89,11 @@ def get_barrage_key(dt):
     """Round to minute for barrage grouping"""
     return dt.strftime('%Y-%m-%d %H:%M')
 
-def calculate_histograms(city_filter=None):
-    """Calculate histograms for a specific city or all cities"""
-    if city_filter:
-        filtered_alarms = [a for a in war_alarms if city_filter in a['cities']]
+def calculate_histograms(locations_filter=None):
+    """Calculate histograms for specific locations or all locations"""
+    if locations_filter:
+        # locations_filter is a set of location names
+        filtered_alarms = [a for a in war_alarms if a['cities'] in locations_filter]
     else:
         filtered_alarms = war_alarms
 
@@ -95,14 +142,15 @@ while days and sum(barrage_histograms_all[days[-1]]) == 0 and sum(alarm_histogra
 
 print(f"Days with data: {len(days)}")
 
-# Pre-calculate histograms for all cities
+# Pre-calculate histograms for all grouped cities
 city_data = {}
-for city in all_cities:
-    barrage_hist, alarm_hist = calculate_histograms(city)
+for main_city in main_cities:
+    locations = city_to_locations[main_city]
+    barrage_hist, alarm_hist = calculate_histograms(locations)
     # Only include cities that have data in the active days
     has_data = any(sum(barrage_hist[d]) > 0 or sum(alarm_hist[d]) > 0 for d in days)
     if has_data:
-        city_data[city] = {
+        city_data[main_city] = {
             'barrage': {d: barrage_hist[d] for d in days},
             'alarm': {d: alarm_hist[d] for d in days}
         }
@@ -113,10 +161,11 @@ city_data['__total__'] = {
     'alarm': {d: alarm_histograms_all[d] for d in days}
 }
 
-print(f"Cities with data: {len(city_data) - 1}")
+print(f"Grouped cities with data: {len(city_data) - 1}")
 
 # Print Tel Aviv statistics
-tel_aviv_barrage, tel_aviv_alarm = calculate_histograms('תל אביב')
+tel_aviv_locations = city_to_locations.get('תל אביב', set())
+tel_aviv_barrage, tel_aviv_alarm = calculate_histograms(tel_aviv_locations)
 print("\n=== Tel Aviv Barrage Histogram by Hour ===")
 for i, day in enumerate(days):
     total = sum(tel_aviv_barrage[day])
