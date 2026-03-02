@@ -501,7 +501,8 @@ html_content += '''                </select>
     </div>
 
     <footer>
-        <p>מקור: פיקוד העורף | Data source: Israeli Home Front Command | נוצר ב-3 במרץ 2026</p>
+        <p>מקור: פיקוד העורף | Data source: Israeli Home Front Command</p>
+        <p>Data provided by <a href="https://github.com/yuval-harpaz/alarms" target="_blank">yuval-harpaz/alarms</a></p>
     </footer>
 
     <script>
