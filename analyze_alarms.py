@@ -5,6 +5,7 @@ Creates HTML visualization of hourly histogram for Tel Aviv alarms
 """
 
 import csv
+import json
 from collections import defaultdict
 from datetime import datetime
 
@@ -29,99 +30,117 @@ for alarm in alarms:
 
 print(f"Total alarms during war period: {len(war_alarms)}")
 
-# Filter for Tel Aviv alarms only
-tel_aviv_alarms = [a for a in war_alarms if 'תל אביב' in a['cities']]
-print(f"Tel Aviv alarms during war period: {len(tel_aviv_alarms)}")
-
-# Deduplicate barrages - a barrage is a unique timestamp (to the minute)
-def get_barrage_key(dt):
-    """Round to minute for barrage grouping"""
-    return dt.strftime('%Y-%m-%d %H:%M')
-
-# Get unique barrages for Tel Aviv (deduplicate by minute)
-tel_aviv_barrages = {}
-for alarm in tel_aviv_alarms:
-    key = get_barrage_key(alarm['datetime'])
-    if key not in tel_aviv_barrages:
-        tel_aviv_barrages[key] = alarm['datetime']
-
-print(f"Unique Tel Aviv barrages: {len(tel_aviv_barrages)}")
+# Get all unique cities
+all_cities = sorted(set(a['cities'] for a in war_alarms))
+print(f"Unique cities: {len(all_cities)}")
 
 # Group by day
 all_days = ['2026-02-28', '2026-03-01', '2026-03-02', '2026-03-03']
 all_day_names = ['Saturday (Feb 28)', 'Sunday (Mar 1)', 'Monday (Mar 2)', 'Tuesday (Mar 3)']
+all_day_names_he = ['שבת (28 בפברואר)', 'ראשון (1 במרץ)', 'שני (2 במרץ)', 'שלישי (3 במרץ)']
 
-# Calculate BARRAGE histogram per day (hour 0-23) - deduplicated
-barrage_histograms = {}
-for day in all_days:
-    barrage_histograms[day] = [0] * 24
+def get_barrage_key(dt):
+    """Round to minute for barrage grouping"""
+    return dt.strftime('%Y-%m-%d %H:%M')
 
-for barrage_time_str, barrage_dt in tel_aviv_barrages.items():
-    day_str = barrage_dt.strftime('%Y-%m-%d')
-    hour = barrage_dt.hour
-    if day_str in barrage_histograms:
-        barrage_histograms[day_str][hour] += 1
+def calculate_histograms(city_filter=None):
+    """Calculate histograms for a specific city or all cities"""
+    if city_filter:
+        filtered_alarms = [a for a in war_alarms if city_filter in a['cities']]
+    else:
+        filtered_alarms = war_alarms
 
-# Calculate ALARM histogram per day (hour 0-23) - individual alarms (not deduplicated)
-alarm_histograms = {}
-for day in all_days:
-    alarm_histograms[day] = [0] * 24
+    # Deduplicate barrages
+    barrages = {}
+    for alarm in filtered_alarms:
+        key = get_barrage_key(alarm['datetime'])
+        if key not in barrages:
+            barrages[key] = alarm['datetime']
 
-for alarm in tel_aviv_alarms:
-    day_str = alarm['datetime'].strftime('%Y-%m-%d')
-    hour = alarm['datetime'].hour
-    if day_str in alarm_histograms:
-        alarm_histograms[day_str][hour] += 1
+    # Calculate BARRAGE histogram per day
+    barrage_hist = {}
+    for day in all_days:
+        barrage_hist[day] = [0] * 24
 
-# Remove trailing days with no data (but keep intermediate zero days)
+    for barrage_time_str, barrage_dt in barrages.items():
+        day_str = barrage_dt.strftime('%Y-%m-%d')
+        hour = barrage_dt.hour
+        if day_str in barrage_hist:
+            barrage_hist[day_str][hour] += 1
+
+    # Calculate ALARM histogram per day
+    alarm_hist = {}
+    for day in all_days:
+        alarm_hist[day] = [0] * 24
+
+    for alarm in filtered_alarms:
+        day_str = alarm['datetime'].strftime('%Y-%m-%d')
+        hour = alarm['datetime'].hour
+        if day_str in alarm_hist:
+            alarm_hist[day_str][hour] += 1
+
+    return barrage_hist, alarm_hist
+
+# Calculate histograms for all cities (for determining which days to show)
+barrage_histograms_all, alarm_histograms_all = calculate_histograms()
+
+# Remove trailing days with no data
 days = all_days[:]
 day_names = all_day_names[:]
-while days and sum(barrage_histograms[days[-1]]) == 0 and sum(alarm_histograms[days[-1]]) == 0:
+day_names_he = all_day_names_he[:]
+while days and sum(barrage_histograms_all[days[-1]]) == 0 and sum(alarm_histograms_all[days[-1]]) == 0:
     days.pop()
     day_names.pop()
+    day_names_he.pop()
 
-# Print statistics
+print(f"Days with data: {len(days)}")
+
+# Pre-calculate histograms for all cities
+city_data = {}
+for city in all_cities:
+    barrage_hist, alarm_hist = calculate_histograms(city)
+    # Only include cities that have data in the active days
+    has_data = any(sum(barrage_hist[d]) > 0 or sum(alarm_hist[d]) > 0 for d in days)
+    if has_data:
+        city_data[city] = {
+            'barrage': {d: barrage_hist[d] for d in days},
+            'alarm': {d: alarm_hist[d] for d in days}
+        }
+
+# Add total
+city_data['__total__'] = {
+    'barrage': {d: barrage_histograms_all[d] for d in days},
+    'alarm': {d: alarm_histograms_all[d] for d in days}
+}
+
+print(f"Cities with data: {len(city_data) - 1}")
+
+# Print Tel Aviv statistics
+tel_aviv_barrage, tel_aviv_alarm = calculate_histograms('תל אביב')
 print("\n=== Tel Aviv Barrage Histogram by Hour ===")
 for i, day in enumerate(days):
-    total = sum(barrage_histograms[day])
+    total = sum(tel_aviv_barrage[day])
     print(f"\n{day_names[i]}: {total} barrages")
     for hour in range(24):
-        count = barrage_histograms[day][hour]
+        count = tel_aviv_barrage[day][hour]
         if count > 0:
             bar = '#' * count
             print(f"  {hour:02d}:00 - {count:2d} {bar}")
 
-print("\n=== Tel Aviv Alarm (Individual) Histogram by Hour ===")
-for i, day in enumerate(days):
-    total = sum(alarm_histograms[day])
-    print(f"\n{day_names[i]}: {total} alarms")
-    for hour in range(24):
-        count = alarm_histograms[day][hour]
-        if count > 0:
-            bar = '#' * min(count, 50)
-            print(f"  {hour:02d}:00 - {count:2d} {bar}")
-
-# Calculate changes between days
-print("\n=== Changes Between Days (Barrages) ===")
-for i in range(1, len(days)):
-    prev_day = days[i-1]
-    curr_day = days[i]
-    prev_total = sum(barrage_histograms[prev_day])
-    curr_total = sum(barrage_histograms[curr_day])
-    change = curr_total - prev_total
-    pct = (change / prev_total * 100) if prev_total > 0 else 0
-    print(f"{day_names[i-1]} -> {day_names[i]}: {prev_total} -> {curr_total} ({change:+d}, {pct:+.1f}%)")
+# More distinct color palette
+colors = ['#e74c3c', '#3498db', '#f39c12', '#9b59b6']  # Red, Blue, Orange, Purple
 
 # Generate HTML
-colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96c93d']
-
 html_content = '''<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tel Aviv Missile Alarms Analysis - War 2026</title>
+    <title>Missile Alarms Analysis - War 2026 | ניתוח התרעות טילים - מלחמה 2026</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -141,21 +160,74 @@ html_content = '''<!DOCTYPE html>
         }
         h1 {
             text-align: center;
-            margin-bottom: 10px;
-            font-size: 2.5em;
+            margin-bottom: 5px;
+            font-size: 2.2em;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        .title-en {
+            text-align: center;
+            font-size: 1.4em;
+            color: #aaa;
+            margin-bottom: 10px;
         }
         .subtitle {
             text-align: center;
+            margin-bottom: 20px;
+            color: #888;
+            font-size: 1em;
+        }
+        .controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
             margin-bottom: 30px;
-            color: #aaa;
+            flex-wrap: wrap;
+        }
+        .city-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .city-selector label {
             font-size: 1.1em;
+        }
+        .select2-container {
+            min-width: 300px;
+        }
+        .select2-container--default .select2-selection--single {
+            background-color: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 8px;
+            height: 42px;
+            padding: 6px;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            color: #fff;
+            line-height: 28px;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 40px;
+        }
+        .select2-dropdown {
+            background-color: #1a1a2e;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        .select2-search--dropdown .select2-search__field {
+            background-color: rgba(255,255,255,0.1);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        .select2-results__option {
+            color: #fff;
+        }
+        .select2-container--default .select2-results__option--highlighted[aria-selected] {
+            background-color: #e74c3c;
         }
         .view-toggle {
             display: flex;
             justify-content: center;
             gap: 10px;
-            margin-bottom: 30px;
         }
         .view-btn {
             padding: 12px 30px;
@@ -170,8 +242,8 @@ html_content = '''<!DOCTYPE html>
             border: 2px solid transparent;
         }
         .view-btn.active {
-            background: #ff6b6b;
-            border-color: #ff6b6b;
+            background: #e74c3c;
+            border-color: #e74c3c;
         }
         .view-btn:hover:not(.active) {
             background: rgba(255,255,255,0.2);
@@ -184,39 +256,40 @@ html_content = '''<!DOCTYPE html>
         }
         .stats-row {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
         }
         .stat-card {
             background: rgba(255,255,255,0.1);
             border-radius: 15px;
-            padding: 20px;
+            padding: 15px;
             text-align: center;
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255,255,255,0.1);
         }
         .stat-value {
-            font-size: 2.5em;
+            font-size: 2.2em;
             font-weight: bold;
-            color: #ff6b6b;
+            color: #e74c3c;
         }
         .stat-label {
             color: #aaa;
             margin-top: 5px;
+            font-size: 0.9em;
         }
         .chart-container {
             background: rgba(255,255,255,0.05);
             border-radius: 20px;
-            padding: 30px;
-            margin-bottom: 30px;
+            padding: 25px;
+            margin-bottom: 25px;
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255,255,255,0.1);
         }
         .chart-title {
             text-align: center;
-            margin-bottom: 20px;
-            font-size: 1.5em;
+            margin-bottom: 15px;
+            font-size: 1.3em;
         }
         .chart-wrapper {
             height: 250px;
@@ -233,7 +306,7 @@ html_content = '''<!DOCTYPE html>
         .day-chart h3 {
             text-align: center;
             margin-bottom: 15px;
-            color: #ff9f43;
+            color: #f39c12;
         }
         .change-indicator {
             text-align: center;
@@ -243,8 +316,8 @@ html_content = '''<!DOCTYPE html>
             font-size: 0.9em;
         }
         .change-up {
-            background: rgba(255, 71, 87, 0.2);
-            color: #ff4757;
+            background: rgba(231, 76, 60, 0.2);
+            color: #e74c3c;
         }
         .change-down {
             background: rgba(46, 213, 115, 0.2);
@@ -253,179 +326,104 @@ html_content = '''<!DOCTYPE html>
         .legend {
             display: flex;
             justify-content: center;
-            gap: 30px;
-            margin-top: 20px;
+            gap: 20px;
+            margin-top: 15px;
             flex-wrap: wrap;
         }
         .legend-item {
             display: flex;
             align-items: center;
             gap: 8px;
+            font-size: 0.9em;
         }
         .legend-color {
-            width: 20px;
-            height: 20px;
+            width: 18px;
+            height: 18px;
             border-radius: 4px;
         }
         footer {
             text-align: center;
-            margin-top: 40px;
+            margin-top: 30px;
             color: #666;
-            font-size: 0.9em;
+            font-size: 0.85em;
         }
         .section-title {
             text-align: center;
+            font-size: 1.5em;
+            margin: 30px 0 15px 0;
+            color: #f39c12;
+        }
+        .current-city {
+            text-align: center;
             font-size: 1.8em;
-            margin: 40px 0 20px 0;
-            color: #ff9f43;
+            margin-bottom: 20px;
+            color: #3498db;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Tel Aviv Missile Alarms</h1>
-        <p class="subtitle">War Period: February 28 - March 3, 2026 | Hourly Analysis</p>
+        <h1>התרעות טילים</h1>
+        <div class="title-en">Missile Alarms Analysis</div>
+        <p class="subtitle">מלחמה 2026 | War Period: February 28 - March 2, 2026</p>
 
-        <div class="view-toggle">
-            <button class="view-btn active" onclick="showView('barrages')">Barrages (Deduplicated)</button>
-            <button class="view-btn" onclick="showView('alarms')">Individual Alarms</button>
+        <div class="controls">
+            <div class="city-selector">
+                <label>עיר / City:</label>
+                <select id="citySelect">
+                    <option value="__total__">הכל / Total</option>
+'''
+
+# Add city options sorted alphabetically
+for city in sorted(city_data.keys()):
+    if city != '__total__':
+        html_content += f'                    <option value="{city}">{city}</option>\n'
+
+html_content += '''                </select>
+            </div>
+            <div class="view-toggle">
+                <button class="view-btn active" onclick="showView('barrages')">מטחים / Barrages</button>
+                <button class="view-btn" onclick="showView('alarms')">התרעות / Alarms</button>
+            </div>
         </div>
+
+        <div class="current-city" id="currentCityDisplay">הכל / Total</div>
 
         <!-- BARRAGES VIEW -->
         <div id="barrages-view" class="view-section active">
-            <div class="stats-row">
-'''
-
-# Add barrage stat cards
-total_barrages = sum(sum(barrage_histograms[d]) for d in days)
-for i, day in enumerate(days):
-    total = sum(barrage_histograms[day])
-    html_content += f'''
-                <div class="stat-card">
-                    <div class="stat-value">{total}</div>
-                    <div class="stat-label">{day_names[i]}</div>
-                </div>
-'''
-
-html_content += f'''
-                <div class="stat-card">
-                    <div class="stat-value" style="color: #ffa502;">{total_barrages}</div>
-                    <div class="stat-label">Total Barrages</div>
-                </div>
-            </div>
+            <div class="stats-row" id="barrageStats"></div>
 
             <div class="chart-container">
-                <h2 class="chart-title">All Days Combined - Hourly Distribution (Stacked)</h2>
+                <h2 class="chart-title">התפלגות שעתית - כל הימים (מוערם) | Hourly Distribution - All Days (Stacked)</h2>
                 <div class="chart-wrapper">
                     <canvas id="barrageCombinedChart"></canvas>
                 </div>
-                <div class="legend">
-'''
-
-for i, day_name in enumerate(day_names):
-    html_content += f'                    <div class="legend-item"><div class="legend-color" style="background:{colors[i]}"></div>{day_name}</div>\n'
-
-html_content += '''                </div>
+                <div class="legend" id="barrageLegend"></div>
             </div>
 
-            <h2 class="section-title">Daily Breakdown</h2>
-'''
-
-# Add individual barrage day charts
-for i, day in enumerate(days):
-    change_html = ''
-    if i > 0:
-        prev_total = sum(barrage_histograms[days[i-1]])
-        curr_total = sum(barrage_histograms[day])
-        if prev_total > 0:
-            change = curr_total - prev_total
-            pct = change / prev_total * 100
-            change_class = 'change-up' if change > 0 else 'change-down'
-            arrow = '↑' if change > 0 else '↓'
-            change_html = f'<div class="change-indicator {change_class}">{arrow} {abs(change)} barrages ({pct:+.1f}%) from previous day</div>'
-
-    html_content += f'''
-            <div class="day-chart">
-                <h3>{day_names[i]}</h3>
-                <div class="day-chart-wrapper">
-                    <canvas id="barrageChart{i}"></canvas>
-                </div>
-                {change_html}
-            </div>
-'''
-
-html_content += '''
+            <h2 class="section-title">פירוט יומי | Daily Breakdown</h2>
+            <div id="barrageDayCharts"></div>
         </div>
 
         <!-- ALARMS VIEW -->
         <div id="alarms-view" class="view-section">
-            <div class="stats-row">
-'''
-
-# Add alarm stat cards
-total_alarms = sum(sum(alarm_histograms[d]) for d in days)
-for i, day in enumerate(days):
-    total = sum(alarm_histograms[day])
-    html_content += f'''
-                <div class="stat-card">
-                    <div class="stat-value">{total}</div>
-                    <div class="stat-label">{day_names[i]}</div>
-                </div>
-'''
-
-html_content += f'''
-                <div class="stat-card">
-                    <div class="stat-value" style="color: #ffa502;">{total_alarms}</div>
-                    <div class="stat-label">Total Alarms</div>
-                </div>
-            </div>
+            <div class="stats-row" id="alarmStats"></div>
 
             <div class="chart-container">
-                <h2 class="chart-title">All Days Combined - Hourly Distribution (Stacked)</h2>
+                <h2 class="chart-title">התפלגות שעתית - כל הימים (מוערם) | Hourly Distribution - All Days (Stacked)</h2>
                 <div class="chart-wrapper">
                     <canvas id="alarmCombinedChart"></canvas>
                 </div>
-                <div class="legend">
-'''
-
-for i, day_name in enumerate(day_names):
-    html_content += f'                    <div class="legend-item"><div class="legend-color" style="background:{colors[i]}"></div>{day_name}</div>\n'
-
-html_content += '''                </div>
+                <div class="legend" id="alarmLegend"></div>
             </div>
 
-            <h2 class="section-title">Daily Breakdown</h2>
-'''
-
-# Add individual alarm day charts
-for i, day in enumerate(days):
-    change_html = ''
-    if i > 0:
-        prev_total = sum(alarm_histograms[days[i-1]])
-        curr_total = sum(alarm_histograms[day])
-        if prev_total > 0:
-            change = curr_total - prev_total
-            pct = change / prev_total * 100
-            change_class = 'change-up' if change > 0 else 'change-down'
-            arrow = '↑' if change > 0 else '↓'
-            change_html = f'<div class="change-indicator {change_class}">{arrow} {abs(change)} alarms ({pct:+.1f}%) from previous day</div>'
-
-    html_content += f'''
-            <div class="day-chart">
-                <h3>{day_names[i]}</h3>
-                <div class="day-chart-wrapper">
-                    <canvas id="alarmChart{i}"></canvas>
-                </div>
-                {change_html}
-            </div>
-'''
-
-html_content += '''
+            <h2 class="section-title">פירוט יומי | Daily Breakdown</h2>
+            <div id="alarmDayCharts"></div>
         </div>
     </div>
 
     <footer>
-        <p>Data source: Israeli Home Front Command alerts | Analysis generated on March 3, 2026</p>
+        <p>מקור: פיקוד העורף | Data source: Israeli Home Front Command | נוצר ב-3 במרץ 2026</p>
     </footer>
 
     <script>
@@ -434,27 +432,34 @@ html_content += '''
                        '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00'];
 
         const colors = ''' + str(colors) + ''';
-        const dayNames = ''' + str(day_names) + ''';
-
-        const barrageData = {
-'''
-
-for i, day in enumerate(days):
-    html_content += f"            '{day}': {barrage_histograms[day]},\n"
-
-html_content += '''        };
-
-        const alarmData = {
-'''
-
-for i, day in enumerate(days):
-    html_content += f"            '{day}': {alarm_histograms[day]},\n"
-
-html_content += '''        };
-
         const days = ''' + str(days) + ''';
+        const dayNames = ''' + str(day_names) + ''';
+        const dayNamesHe = ''' + str(day_names_he) + ''';
 
-        // View toggle
+        const cityData = ''' + json.dumps(city_data, ensure_ascii=False) + ''';
+
+        let barrageCombinedChart = null;
+        let alarmCombinedChart = null;
+        let barrageDayCharts = [];
+        let alarmDayCharts = [];
+
+        // Initialize Select2
+        $(document).ready(function() {
+            $('#citySelect').select2({
+                placeholder: 'בחר עיר / Select city',
+                allowClear: false,
+                width: '300px'
+            });
+
+            $('#citySelect').on('change', function() {
+                updateCharts(this.value);
+            });
+
+            // Initial render
+            initCharts();
+            updateCharts('__total__');
+        });
+
         function showView(view) {
             document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
             document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
@@ -462,8 +467,50 @@ html_content += '''        };
             event.target.classList.add('active');
         }
 
-        // Create stacked combined chart
-        function createCombinedChart(canvasId, data) {
+        function initCharts() {
+            // Create legend
+            const legendHtml = days.map((day, i) =>
+                `<div class="legend-item"><div class="legend-color" style="background:${colors[i]}"></div>${dayNamesHe[i]} | ${dayNames[i]}</div>`
+            ).join('');
+            document.getElementById('barrageLegend').innerHTML = legendHtml;
+            document.getElementById('alarmLegend').innerHTML = legendHtml;
+
+            // Create day chart containers
+            let barrageDayHtml = '';
+            let alarmDayHtml = '';
+            days.forEach((day, i) => {
+                barrageDayHtml += `
+                    <div class="day-chart">
+                        <h3>${dayNamesHe[i]} | ${dayNames[i]}</h3>
+                        <div class="day-chart-wrapper">
+                            <canvas id="barrageChart${i}"></canvas>
+                        </div>
+                        <div class="change-indicator" id="barrageChange${i}"></div>
+                    </div>`;
+                alarmDayHtml += `
+                    <div class="day-chart">
+                        <h3>${dayNamesHe[i]} | ${dayNames[i]}</h3>
+                        <div class="day-chart-wrapper">
+                            <canvas id="alarmChart${i}"></canvas>
+                        </div>
+                        <div class="change-indicator" id="alarmChange${i}"></div>
+                    </div>`;
+            });
+            document.getElementById('barrageDayCharts').innerHTML = barrageDayHtml;
+            document.getElementById('alarmDayCharts').innerHTML = alarmDayHtml;
+
+            // Initialize combined charts
+            barrageCombinedChart = createCombinedChart('barrageCombinedChart');
+            alarmCombinedChart = createCombinedChart('alarmCombinedChart');
+
+            // Initialize day charts
+            days.forEach((day, i) => {
+                barrageDayCharts.push(createDayChart('barrageChart' + i, i));
+                alarmDayCharts.push(createDayChart('alarmChart' + i, i));
+            });
+        }
+
+        function createCombinedChart(canvasId) {
             const ctx = document.getElementById(canvasId).getContext('2d');
             return new Chart(ctx, {
                 type: 'bar',
@@ -471,7 +518,7 @@ html_content += '''        };
                     labels: hours,
                     datasets: days.map((day, i) => ({
                         label: dayNames[i],
-                        data: data[day],
+                        data: new Array(24).fill(0),
                         backgroundColor: colors[i],
                         borderColor: colors[i],
                         borderWidth: 1
@@ -480,9 +527,7 @@ html_content += '''        };
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false }
-                    },
+                    plugins: { legend: { display: false } },
                     scales: {
                         x: {
                             stacked: true,
@@ -500,8 +545,7 @@ html_content += '''        };
             });
         }
 
-        // Create individual day chart
-        function createDayChart(canvasId, data, colorIndex) {
+        function createDayChart(canvasId, colorIndex) {
             const ctx = document.getElementById(canvasId).getContext('2d');
             return new Chart(ctx, {
                 type: 'bar',
@@ -509,7 +553,7 @@ html_content += '''        };
                     labels: hours,
                     datasets: [{
                         label: 'Count',
-                        data: data,
+                        data: new Array(24).fill(0),
                         backgroundColor: colors[colorIndex],
                         borderColor: colors[colorIndex],
                         borderWidth: 1
@@ -518,9 +562,7 @@ html_content += '''        };
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false }
-                    },
+                    plugins: { legend: { display: false } },
                     scales: {
                         x: {
                             ticks: { color: '#aaa', maxRotation: 45, minRotation: 45 },
@@ -536,14 +578,83 @@ html_content += '''        };
             });
         }
 
-        // Initialize all charts
-        createCombinedChart('barrageCombinedChart', barrageData);
-        createCombinedChart('alarmCombinedChart', alarmData);
+        function updateCharts(city) {
+            const data = cityData[city] || cityData['__total__'];
+            const displayName = city === '__total__' ? 'הכל / Total' : city;
+            document.getElementById('currentCityDisplay').textContent = displayName;
 
-        days.forEach((day, i) => {
-            createDayChart('barrageChart' + i, barrageData[day], i);
-            createDayChart('alarmChart' + i, alarmData[day], i);
-        });
+            // Update barrage charts
+            updateChartData(barrageCombinedChart, data.barrage);
+            days.forEach((day, i) => {
+                barrageDayCharts[i].data.datasets[0].data = data.barrage[day];
+                barrageDayCharts[i].update();
+            });
+
+            // Update alarm charts
+            updateChartData(alarmCombinedChart, data.alarm);
+            days.forEach((day, i) => {
+                alarmDayCharts[i].data.datasets[0].data = data.alarm[day];
+                alarmDayCharts[i].update();
+            });
+
+            // Update stats
+            updateStats('barrage', data.barrage, 'מטחים', 'Barrages');
+            updateStats('alarm', data.alarm, 'התרעות', 'Alarms');
+
+            // Update change indicators
+            updateChangeIndicators('barrage', data.barrage, 'מטחים', 'barrages');
+            updateChangeIndicators('alarm', data.alarm, 'התרעות', 'alarms');
+        }
+
+        function updateChartData(chart, data) {
+            days.forEach((day, i) => {
+                chart.data.datasets[i].data = data[day];
+            });
+            chart.update();
+        }
+
+        function updateStats(type, data, labelHe, labelEn) {
+            let html = '';
+            let total = 0;
+            days.forEach((day, i) => {
+                const sum = data[day].reduce((a, b) => a + b, 0);
+                total += sum;
+                html += `
+                    <div class="stat-card">
+                        <div class="stat-value" style="color: ${colors[i]}">${sum}</div>
+                        <div class="stat-label">${dayNamesHe[i]}</div>
+                    </div>`;
+            });
+            html += `
+                <div class="stat-card">
+                    <div class="stat-value" style="color: #ffa502;">${total}</div>
+                    <div class="stat-label">סה"כ ${labelHe} | Total ${labelEn}</div>
+                </div>`;
+            document.getElementById(type + 'Stats').innerHTML = html;
+        }
+
+        function updateChangeIndicators(type, data, labelHe, labelEn) {
+            days.forEach((day, i) => {
+                const elem = document.getElementById(type + 'Change' + i);
+                if (i === 0) {
+                    elem.style.display = 'none';
+                    return;
+                }
+                const prev = data[days[i-1]].reduce((a, b) => a + b, 0);
+                const curr = data[day].reduce((a, b) => a + b, 0);
+                if (prev === 0) {
+                    elem.style.display = 'none';
+                    return;
+                }
+                const change = curr - prev;
+                const pct = (change / prev * 100).toFixed(1);
+                const arrow = change > 0 ? '↑' : '↓';
+                const cls = change > 0 ? 'change-up' : 'change-down';
+                elem.className = 'change-indicator ' + cls;
+                elem.style.display = 'block';
+                elem.innerHTML = `${arrow} ${Math.abs(change)} ${labelHe} (${pct > 0 ? '+' : ''}${pct}%) מהיום הקודם | ${arrow} ${Math.abs(change)} ${labelEn} from previous day`;
+            });
+        }
     </script>
 </body>
 </html>
