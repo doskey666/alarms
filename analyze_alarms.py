@@ -95,57 +95,41 @@ all_days = ['2026-02-28', '2026-03-01', '2026-03-02', '2026-03-03']
 all_day_names = ['Saturday (Feb 28)', 'Sunday (Mar 1)', 'Monday (Mar 2)', 'Tuesday (Mar 3)']
 all_day_names_he = ['שבת (28 בפברואר)', 'ראשון (1 במרץ)', 'שני (2 במרץ)', 'שלישי (3 במרץ)']
 
-def get_barrage_key(dt):
-    """Round to minute for barrage grouping"""
-    return dt.strftime('%Y-%m-%d %H:%M')
-
 def calculate_histograms(locations_filter=None):
-    """Calculate histograms for specific locations or all locations"""
+    """Calculate histogram for specific locations or all locations"""
     if locations_filter:
-        # locations_filter is a set of location names
         filtered_alarms = [a for a in war_alarms if a['cities'] in locations_filter]
     else:
         filtered_alarms = war_alarms
 
-    # Deduplicate barrages
-    barrages = {}
+    # Deduplicate alarms by exact second
+    unique_seconds = {}
     for alarm in filtered_alarms:
-        key = get_barrage_key(alarm['datetime'])
-        if key not in barrages:
-            barrages[key] = alarm['datetime']
+        key = alarm['datetime'].strftime('%Y-%m-%d %H:%M:%S')
+        if key not in unique_seconds:
+            unique_seconds[key] = alarm['datetime']
 
-    # Calculate BARRAGE histogram per day
-    barrage_hist = {}
-    for day in all_days:
-        barrage_hist[day] = [0] * 24
-
-    for barrage_time_str, barrage_dt in barrages.items():
-        day_str = barrage_dt.strftime('%Y-%m-%d')
-        hour = barrage_dt.hour
-        if day_str in barrage_hist:
-            barrage_hist[day_str][hour] += 1
-
-    # Calculate ALARM histogram per day
+    # Calculate histogram per day
     alarm_hist = {}
     for day in all_days:
         alarm_hist[day] = [0] * 24
 
-    for alarm in filtered_alarms:
-        day_str = alarm['datetime'].strftime('%Y-%m-%d')
-        hour = alarm['datetime'].hour
+    for second_key, dt in unique_seconds.items():
+        day_str = dt.strftime('%Y-%m-%d')
+        hour = dt.hour
         if day_str in alarm_hist:
             alarm_hist[day_str][hour] += 1
 
-    return barrage_hist, alarm_hist
+    return alarm_hist
 
 # Calculate histograms for all cities (for determining which days to show)
-barrage_histograms_all, alarm_histograms_all = calculate_histograms()
+alarm_histograms_all = calculate_histograms()
 
 # Remove trailing days with no data
 days = all_days[:]
 day_names = all_day_names[:]
 day_names_he = all_day_names_he[:]
-while days and sum(barrage_histograms_all[days[-1]]) == 0 and sum(alarm_histograms_all[days[-1]]) == 0:
+while days and sum(alarm_histograms_all[days[-1]]) == 0:
     days.pop()
     day_names.pop()
     day_names_he.pop()
@@ -156,18 +140,16 @@ print(f"Days with data: {len(days)}")
 city_data = {}
 for main_city in main_cities:
     locations = city_to_locations[main_city]
-    barrage_hist, alarm_hist = calculate_histograms(locations)
+    alarm_hist = calculate_histograms(locations)
     # Only include cities that have data in the active days
-    has_data = any(sum(barrage_hist[d]) > 0 or sum(alarm_hist[d]) > 0 for d in days)
+    has_data = any(sum(alarm_hist[d]) > 0 for d in days)
     if has_data:
         city_data[main_city] = {
-            'barrage': {d: barrage_hist[d] for d in days},
             'alarm': {d: alarm_hist[d] for d in days}
         }
 
 # Add total
 city_data['__total__'] = {
-    'barrage': {d: barrage_histograms_all[d] for d in days},
     'alarm': {d: alarm_histograms_all[d] for d in days}
 }
 
@@ -175,13 +157,13 @@ print(f"Grouped cities with data: {len(city_data) - 1}")
 
 # Print Tel Aviv statistics
 tel_aviv_locations = city_to_locations.get('תל אביב', set())
-tel_aviv_barrage, tel_aviv_alarm = calculate_histograms(tel_aviv_locations)
-print("\n=== Tel Aviv Barrage Histogram by Hour ===")
+tel_aviv_alarm = calculate_histograms(tel_aviv_locations)
+print("\n=== Tel Aviv Alarm Histogram by Hour ===")
 for i, day in enumerate(days):
-    total = sum(tel_aviv_barrage[day])
-    print(f"\n{day_names[i]}: {total} barrages")
+    total = sum(tel_aviv_alarm[day])
+    print(f"\n{day_names[i]}: {total} alarms")
     for hour in range(24):
-        count = tel_aviv_barrage[day][hour]
+        count = tel_aviv_alarm[day][hour]
         if count > 0:
             bar = '#' * count
             print(f"  {hour:02d}:00 - {count:2d} {bar}")
@@ -282,36 +264,6 @@ html_content = '''<!DOCTYPE html>
         }
         .select2-container--default .select2-results__option--highlighted[aria-selected] {
             background-color: #e74c3c;
-        }
-        .view-toggle {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-        }
-        .view-btn {
-            padding: 12px 30px;
-            border: none;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 1em;
-            font-weight: bold;
-            transition: all 0.3s ease;
-            background: rgba(255,255,255,0.1);
-            color: #fff;
-            border: 2px solid transparent;
-        }
-        .view-btn.active {
-            background: #e74c3c;
-            border-color: #e74c3c;
-        }
-        .view-btn:hover:not(.active) {
-            background: rgba(255,255,255,0.2);
-        }
-        .view-section {
-            display: none;
-        }
-        .view-section.active {
-            display: block;
         }
         .stats-table-container {
             margin-bottom: 25px;
@@ -459,45 +411,22 @@ for city in sorted(city_data.keys()):
 
 html_content += '''                </select>
             </div>
-            <div class="view-toggle">
-                <button class="view-btn active" onclick="showView('barrages')">מטחים / Barrages</button>
-                <button class="view-btn" onclick="showView('alarms')">התרעות / Alarms</button>
-            </div>
         </div>
 
         <div class="current-city" id="currentCityDisplay">הכל / Total</div>
 
-        <!-- BARRAGES VIEW -->
-        <div id="barrages-view" class="view-section active">
-            <div class="stats-table-container" id="barrageStats"></div>
+        <div class="stats-table-container" id="alarmStats"></div>
 
-            <div class="chart-container">
-                <h2 class="chart-title">התפלגות שעתית - כל הימים (מוערם) | Hourly Distribution - All Days (Stacked)</h2>
-                <div class="chart-wrapper">
-                    <canvas id="barrageCombinedChart"></canvas>
-                </div>
-                <div class="legend" id="barrageLegend"></div>
+        <div class="chart-container">
+            <h2 class="chart-title">התפלגות שעתית - כל הימים (מוערם) | Hourly Distribution - All Days (Stacked)</h2>
+            <div class="chart-wrapper">
+                <canvas id="alarmCombinedChart"></canvas>
             </div>
-
-            <h2 class="section-title">פירוט יומי | Daily Breakdown</h2>
-            <div id="barrageDayCharts"></div>
+            <div class="legend" id="alarmLegend"></div>
         </div>
 
-        <!-- ALARMS VIEW -->
-        <div id="alarms-view" class="view-section">
-            <div class="stats-table-container" id="alarmStats"></div>
-
-            <div class="chart-container">
-                <h2 class="chart-title">התפלגות שעתית - כל הימים (מוערם) | Hourly Distribution - All Days (Stacked)</h2>
-                <div class="chart-wrapper">
-                    <canvas id="alarmCombinedChart"></canvas>
-                </div>
-                <div class="legend" id="alarmLegend"></div>
-            </div>
-
-            <h2 class="section-title">פירוט יומי | Daily Breakdown</h2>
-            <div id="alarmDayCharts"></div>
-        </div>
+        <h2 class="section-title">פירוט יומי | Daily Breakdown</h2>
+        <div id="alarmDayCharts"></div>
     </div>
 
     <footer>
@@ -517,9 +446,7 @@ html_content += '''                </select>
 
         const cityData = ''' + json.dumps(city_data, ensure_ascii=False) + ''';
 
-        let barrageCombinedChart = null;
         let alarmCombinedChart = null;
-        let barrageDayCharts = [];
         let alarmDayCharts = [];
 
         // URL parameter handling
@@ -565,33 +492,16 @@ html_content += '''                </select>
             }
         });
 
-        function showView(view) {
-            document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
-            document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById(view + '-view').classList.add('active');
-            event.target.classList.add('active');
-        }
-
         function initCharts() {
             // Create legend
             const legendHtml = days.map((day, i) =>
                 `<div class="legend-item"><div class="legend-color" style="background:${colors[i]}"></div>${dayNamesHe[i]} | ${dayNames[i]}</div>`
             ).join('');
-            document.getElementById('barrageLegend').innerHTML = legendHtml;
             document.getElementById('alarmLegend').innerHTML = legendHtml;
 
             // Create day chart containers
-            let barrageDayHtml = '';
             let alarmDayHtml = '';
             days.forEach((day, i) => {
-                barrageDayHtml += `
-                    <div class="day-chart">
-                        <h3>${dayNamesHe[i]} | ${dayNames[i]}</h3>
-                        <div class="day-chart-wrapper">
-                            <canvas id="barrageChart${i}"></canvas>
-                        </div>
-                        <div class="change-indicator" id="barrageChange${i}"></div>
-                    </div>`;
                 alarmDayHtml += `
                     <div class="day-chart">
                         <h3>${dayNamesHe[i]} | ${dayNames[i]}</h3>
@@ -601,16 +511,13 @@ html_content += '''                </select>
                         <div class="change-indicator" id="alarmChange${i}"></div>
                     </div>`;
             });
-            document.getElementById('barrageDayCharts').innerHTML = barrageDayHtml;
             document.getElementById('alarmDayCharts').innerHTML = alarmDayHtml;
 
-            // Initialize combined charts
-            barrageCombinedChart = createCombinedChart('barrageCombinedChart');
+            // Initialize combined chart
             alarmCombinedChart = createCombinedChart('alarmCombinedChart');
 
             // Initialize day charts
             days.forEach((day, i) => {
-                barrageDayCharts.push(createDayChart('barrageChart' + i, i));
                 alarmDayCharts.push(createDayChart('alarmChart' + i, i));
             });
         }
@@ -688,13 +595,6 @@ html_content += '''                </select>
             const displayName = city === '__total__' ? 'הכל / Total' : city;
             document.getElementById('currentCityDisplay').textContent = displayName;
 
-            // Update barrage charts
-            updateChartData(barrageCombinedChart, data.barrage);
-            days.forEach((day, i) => {
-                barrageDayCharts[i].data.datasets[0].data = data.barrage[day];
-                barrageDayCharts[i].update();
-            });
-
             // Update alarm charts
             updateChartData(alarmCombinedChart, data.alarm);
             days.forEach((day, i) => {
@@ -703,11 +603,9 @@ html_content += '''                </select>
             });
 
             // Update stats
-            updateStats('barrage', data.barrage, 'מטחים', 'Barrages');
             updateStats('alarm', data.alarm, 'התרעות', 'Alarms');
 
             // Update change indicators
-            updateChangeIndicators('barrage', data.barrage, 'מטחים', 'barrages');
             updateChangeIndicators('alarm', data.alarm, 'התרעות', 'alarms');
         }
 
