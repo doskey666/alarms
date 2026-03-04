@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Analyze missile alarm data from the war starting 2026-02-28
-Creates HTML visualization of hourly histogram for Tel Aviv alarms
+Creates HTML visualization of hourly histogram for alarms with filters
 """
 
 import csv
@@ -34,6 +34,7 @@ for alarm in alarms:
         alarm_time = datetime.strptime(alarm['time'], '%Y-%m-%d %H:%M:%S')
         if alarm_time >= war_start:
             alarm['datetime'] = alarm_time
+            alarm['origin'] = alarm.get('origin', '') or ''
             war_alarms.append(alarm)
     except:
         continue
@@ -43,6 +44,10 @@ print(f"Total alarms during war period: {len(war_alarms)}")
 # Get all unique locations
 all_locations = sorted(set(a['cities'] for a in war_alarms))
 print(f"Unique locations: {len(all_locations)}")
+
+# Get all unique origins
+all_origins = sorted(set(a['origin'] for a in war_alarms if a['origin']))
+print(f"Unique origins: {all_origins}")
 
 import re
 
@@ -55,9 +60,7 @@ def extract_main_city(location):
 
     # Skip "אזור תעשייה" locations - extract city name if possible
     if location.startswith('אזור תעשייה'):
-        # Try to find a known city in the rest of the string
         rest = location.replace('אזור תעשייה', '').strip()
-        # Return the industrial zone as-is for now, or extract city
         return location  # Keep industrial zones separate
 
     # Handle dash-separated names (e.g., "תל אביב - מרכז העיר")
@@ -90,6 +93,100 @@ for loc in all_locations:
 main_cities = sorted(city_to_locations.keys())
 print(f"Unique main cities (grouped): {len(main_cities)}")
 
+# Define area mappings - cities that belong to each area
+# A city can belong to multiple areas (overlapping)
+area_definitions = {
+    'מישור החוף': [
+        'תל אביב', 'חולון', 'בת ים', 'ראשון לציון', 'חיפה', 'הרצליה', 'רעננה', 'כפר סבא',
+        'נתניה', 'חדרה', 'פתח תקווה', 'רמת גן', 'גבעתיים', 'בני ברק', 'רמת השרון',
+        'הוד השרון', 'כפר יונה', 'אור יהודה', 'יהוד', 'אזור', 'קריית אונו', 'גבעת שמואל',
+        'נס ציונה', 'רחובות', 'יבנה', 'אשדוד', 'אשקלון', 'עכו', 'נהריה', 'קריית ים',
+        'קריית מוצקין', 'קריית ביאליק', 'קריית אתא', 'טירת כרמל', 'עתלית', 'זכרון יעקב',
+        'בנימינה', 'פרדס חנה', 'אור עקיבא', 'קיסריה', 'גן יבנה', 'קריית מלאכי',
+    ],
+    'גוש דן': [
+        'תל אביב', 'חולון', 'בת ים', 'ראשון לציון', 'הרצליה', 'רעננה', 'פתח תקווה',
+        'רמת גן', 'גבעתיים', 'בני ברק', 'רמת השרון', 'אור יהודה', 'יהוד', 'אזור',
+        'קריית אונו', 'גבעת שמואל', 'כפר סבא', 'הוד השרון', 'לוד', 'רמלה',
+    ],
+    'השפלה': [
+        'רחובות', 'נס ציונה', 'גדרה', 'יבנה', 'אשדוד', 'אשקלון', 'קריית גת', 'קריית מלאכי',
+        'בית שמש', 'גן יבנה', 'באר טוביה', 'שדרות', 'נתיבות', 'אופקים',
+    ],
+    'הרי יהודה': [
+        'ירושלים', 'בית שמש', 'מעלה אדומים', 'גוש עציון', 'אפרת', 'ביתר עילית',
+        'מבשרת ציון', 'מודיעין', 'מודיעין עילית',
+    ],
+    'אזור ירושלים': [
+        'ירושלים', 'בית שמש', 'מעלה אדומים', 'מבשרת ציון', 'מודיעין', 'מודיעין עילית',
+        'גוש עציון', 'אפרת', 'ביתר עילית', 'מעלה אפרים', 'אבו גוש',
+    ],
+    'הרי שומרון': [
+        'אריאל', 'קדומים', 'ברקן', 'קרני שומרון', 'אלקנה', 'עמנואל',
+    ],
+    'הגליל': [
+        'צפת', 'כרמיאל', 'נהריה', 'עכו', 'מעלות', 'שלומי', 'ראש פינה', 'חצור הגלילית',
+        'קריית שמונה', 'מטולה', 'יסוד המעלה', 'עמיעד', 'ראש הנקרה', 'נהריה',
+        'מגדל העמק', 'יוקנעם', 'נצרת', 'נצרת עילית', 'נוף הגליל', 'טבריה',
+    ],
+    'עמק החולה': [
+        'קריית שמונה', 'מטולה', 'יסוד המעלה', 'ראש פינה', 'חצור הגלילית',
+        'כפר גלעדי', 'דן', 'שניר', 'מנרה',
+    ],
+    'רמת הגולן': [
+        'קצרין', 'רמת מגשימים', 'אל רום', 'נווה אטי"ב', 'מג\'דל שמס', 'מסעדה', 'בוקעאתא',
+        'עין זיוון', 'אניעם', 'מרום גולן', 'אורטל', 'נמרוד', 'בניאס',
+    ],
+    'עמק יזרעאל': [
+        'עפולה', 'מגדל העמק', 'יוקנעם', 'נצרת', 'נצרת עילית', 'נוף הגליל',
+        'בית שאן', 'בית שערים', 'נהלל', 'כפר תבור',
+    ],
+    'עמק בית שאן': [
+        'בית שאן', 'מעוז חיים', 'נווה אור', 'רשפים', 'שדה נחום', 'טירת צבי',
+    ],
+    'בקעת הירדן': [
+        'בית שאן', 'מחולה', 'חמדת', 'מכורה', 'משואה', 'פצאל', 'ארגמן', 'יפית',
+        'נערן', 'גלגל', 'יריחו',
+    ],
+    'הנגב': [
+        'באר שבע', 'דימונה', 'ערד', 'ירוחם', 'מצפה רמון', 'שדה בוקר',
+        'אופקים', 'נתיבות', 'שדרות', 'קריית גת', 'רהט', 'תל שבע', 'לקיה', 'כסייפה',
+    ],
+    'עוטף עזה': [
+        'שדרות', 'נתיבות', 'אופקים', 'אשקלון', 'קריית גת', 'קריית מלאכי',
+        'ניר עם', 'כיסופים', 'נחל עוז', 'כפר עזה', 'בארי', 'רעים', 'עין השלושה',
+        'ניר עוז', 'מגן', 'ארז', 'יבול', 'נירים', 'עין הבשור', 'תקומה',
+    ],
+    'הערבה': [
+        'אילת', 'יטבתה', 'באר אורה', 'גרופית', 'פארן', 'נאות סמדר', 'קטורה',
+        'לוטן', 'עידן', 'ספיר', 'עין חצבה', 'עין יהב', 'צופר',
+    ],
+    'חיפה והקריות': [
+        'חיפה', 'קריית ים', 'קריית מוצקין', 'קריית ביאליק', 'קריית אתא',
+        'טירת כרמל', 'נשר', 'קריית חיים', 'קריית שמואל',
+    ],
+}
+
+# Create reverse mapping: city -> list of areas
+city_to_areas = defaultdict(list)
+for area, cities in area_definitions.items():
+    for city in cities:
+        city_to_areas[city].append(area)
+
+# Also map by pattern matching for cities not explicitly listed
+def get_city_areas(city_name):
+    """Get areas for a city, including pattern matching."""
+    areas = city_to_areas.get(city_name, [])
+
+    # Pattern matching for common prefixes
+    if not areas:
+        # Check if it starts with a known area indicator
+        if any(x in city_name for x in ['קיבוץ', 'מושב', 'ישוב']):
+            # Try to infer from nearby cities or leave unmapped
+            pass
+
+    return areas if areas else ['אחר']  # 'Other' for unmapped cities
+
 # Group by day - dynamically from alarm data
 all_days = sorted(set(a['datetime'].strftime('%Y-%m-%d') for a in war_alarms))
 
@@ -109,81 +206,59 @@ for day_str in all_days:
     all_day_names.append(f"{day_name_en[weekday]} ({month_name_en[month_num]} {day_num})")
     all_day_names_he.append(f"{day_name_he[weekday]} ({day_num} {month_name_he[month_num]})")
 
-def calculate_histograms(locations_filter=None):
-    """Calculate histogram for specific locations or all locations"""
-    if locations_filter:
-        filtered_alarms = [a for a in war_alarms if a['cities'] in locations_filter]
-    else:
-        filtered_alarms = war_alarms
+# Build compact alarm data for frontend
+# Format: {timestamp_second: {cities: [city_indices], origin: origin_index}}
+city_list = sorted(main_cities)
+city_to_idx = {c: i for i, c in enumerate(city_list)}
+origin_list = [''] + sorted(all_origins)  # Empty string first for "unknown"
+origin_to_idx = {o: i for i, o in enumerate(origin_list)}
 
-    # Deduplicate alarms by exact second
-    unique_seconds = {}
-    for alarm in filtered_alarms:
-        key = alarm['datetime'].strftime('%Y-%m-%d %H:%M:%S')
-        if key not in unique_seconds:
-            unique_seconds[key] = alarm['datetime']
+# Group alarms by exact second
+alarms_by_second = defaultdict(lambda: {'cities': set(), 'origin': ''})
+for alarm in war_alarms:
+    second_key = alarm['datetime'].strftime('%Y-%m-%d %H:%M:%S')
+    main_city = extract_main_city(alarm['cities'])
+    if main_city in city_to_idx:
+        alarms_by_second[second_key]['cities'].add(city_to_idx[main_city])
+    # Keep first non-empty origin for this second
+    if not alarms_by_second[second_key]['origin'] and alarm['origin']:
+        alarms_by_second[second_key]['origin'] = alarm['origin']
 
-    # Calculate histogram per day
-    alarm_hist = {}
-    for day in all_days:
-        alarm_hist[day] = [0] * 24
+# Convert to list format for JSON
+compact_alarms = []
+for second_key, data in sorted(alarms_by_second.items()):
+    compact_alarms.append({
+        't': second_key,
+        'c': sorted(data['cities']),
+        'o': origin_to_idx.get(data['origin'], 0)
+    })
 
-    for second_key, dt in unique_seconds.items():
-        day_str = dt.strftime('%Y-%m-%d')
-        hour = dt.hour
-        if day_str in alarm_hist:
-            alarm_hist[day_str][hour] += 1
+print(f"Unique alarm seconds: {len(compact_alarms)}")
 
-    return alarm_hist
-
-# Calculate histograms for all cities (for determining which days to show)
-alarm_histograms_all = calculate_histograms()
+# Build area data for frontend
+area_list = sorted(area_definitions.keys())
+area_to_cities_idx = {}
+for area in area_list:
+    city_indices = []
+    for city in area_definitions[area]:
+        if city in city_to_idx:
+            city_indices.append(city_to_idx[city])
+    area_to_cities_idx[area] = sorted(set(city_indices))
 
 # Remove trailing days with no data
 days = all_days[:]
 day_names = all_day_names[:]
 day_names_he = all_day_names_he[:]
-while days and sum(alarm_histograms_all[days[-1]]) == 0:
-    days.pop()
-    day_names.pop()
-    day_names_he.pop()
 
 print(f"Days with data: {len(days)}")
 
-# Pre-calculate histograms for all grouped cities
-city_data = {}
-for main_city in main_cities:
-    locations = city_to_locations[main_city]
-    alarm_hist = calculate_histograms(locations)
-    # Only include cities that have data in the active days
-    has_data = any(sum(alarm_hist[d]) > 0 for d in days)
-    if has_data:
-        city_data[main_city] = {
-            'alarm': {d: alarm_hist[d] for d in days}
-        }
+# Print Tel Aviv statistics for verification
+tel_aviv_idx = city_to_idx.get('תל אביב', -1)
+tel_aviv_count = sum(1 for a in compact_alarms if tel_aviv_idx in a['c'])
+print(f"\nTel Aviv alarm count: {tel_aviv_count}")
 
-# Add total
-city_data['__total__'] = {
-    'alarm': {d: alarm_histograms_all[d] for d in days}
-}
-
-print(f"Grouped cities with data: {len(city_data) - 1}")
-
-# Print Tel Aviv statistics
-tel_aviv_locations = city_to_locations.get('תל אביב', set())
-tel_aviv_alarm = calculate_histograms(tel_aviv_locations)
-print("\n=== Tel Aviv Alarm Histogram by Hour ===")
-for i, day in enumerate(days):
-    total = sum(tel_aviv_alarm[day])
-    print(f"\n{day_names[i]}: {total} alarms")
-    for hour in range(24):
-        count = tel_aviv_alarm[day][hour]
-        if count > 0:
-            bar = '#' * count
-            print(f"  {hour:02d}:00 - {count:2d} {bar}")
-
-# More distinct color palette
-colors = ['#e74c3c', '#3498db', '#f39c12', '#9b59b6']  # Red, Blue, Orange, Purple
+# More distinct color palette (extended for more days)
+colors = ['#e74c3c', '#3498db', '#f39c12', '#9b59b6', '#2ecc71', '#1abc9c', '#e67e22', '#34495e']
 
 # Generate HTML
 html_content = '''<!DOCTYPE html>
@@ -239,16 +314,17 @@ html_content = '''<!DOCTYPE html>
             margin-bottom: 30px;
             flex-wrap: wrap;
         }
-        .city-selector {
+        .filter-group {
             display: flex;
             align-items: center;
             gap: 10px;
         }
-        .city-selector label {
-            font-size: 1.1em;
+        .filter-group label {
+            font-size: 1em;
+            white-space: nowrap;
         }
         .select2-container {
-            min-width: 300px;
+            min-width: 200px;
         }
         .select2-container--default .select2-selection--single {
             background-color: rgba(255,255,255,0.1);
@@ -391,15 +467,18 @@ html_content = '''<!DOCTYPE html>
             color: #666;
             font-size: 0.85em;
         }
+        footer a {
+            color: #3498db;
+        }
         .section-title {
             text-align: center;
             font-size: 1.5em;
             margin: 30px 0 15px 0;
             color: #f39c12;
         }
-        .current-city {
+        .current-filter {
             text-align: center;
-            font-size: 1.8em;
+            font-size: 1.5em;
             margin-bottom: 20px;
             color: #3498db;
         }
@@ -409,25 +488,48 @@ html_content = '''<!DOCTYPE html>
     <div class="container">
         <h1>התרעות טילים</h1>
         <div class="title-en">Missile Alarms Analysis</div>
-        <p class="subtitle">מלחמה 2026 | War Period: February 28 - March 2, 2026</p>
+        <p class="subtitle">מלחמה 2026 | War 2026</p>
 
         <div class="controls">
-            <div class="city-selector">
+            <div class="filter-group">
+                <label>מקור / Origin:</label>
+                <select id="originSelect">
+                    <option value="__all__">הכל / All</option>
+'''
+
+# Add origin options
+for origin in all_origins:
+    html_content += f'                    <option value="{origin}">{origin}</option>\n'
+
+html_content += '''                </select>
+            </div>
+            <div class="filter-group">
+                <label>אזור / Area:</label>
+                <select id="areaSelect">
+                    <option value="__all__">הכל / All</option>
+'''
+
+# Add area options
+for area in area_list:
+    html_content += f'                    <option value="{area}">{area}</option>\n'
+
+html_content += '''                </select>
+            </div>
+            <div class="filter-group">
                 <label>עיר / City:</label>
                 <select id="citySelect">
-                    <option value="__total__">הכל / Total</option>
+                    <option value="__all__">הכל / All</option>
 '''
 
 # Add city options sorted alphabetically
-for city in sorted(city_data.keys()):
-    if city != '__total__':
-        html_content += f'                    <option value="{city}">{city}</option>\n'
+for city in city_list:
+    html_content += f'                    <option value="{city}">{city}</option>\n'
 
 html_content += '''                </select>
             </div>
         </div>
 
-        <div class="current-city" id="currentCityDisplay">הכל / Total</div>
+        <div class="current-filter" id="currentFilterDisplay">הכל / All</div>
 
         <div class="stats-table-container" id="alarmStats"></div>
 
@@ -453,15 +555,81 @@ html_content += '''                </select>
                        '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00',
                        '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00'];
 
-        const colors = ''' + str(colors) + ''';
-        const days = ''' + str(days) + ''';
-        const dayNames = ''' + str(day_names) + ''';
-        const dayNamesHe = ''' + str(day_names_he) + ''';
+        const colors = ''' + json.dumps(colors) + ''';
+        const days = ''' + json.dumps(days) + ''';
+        const dayNames = ''' + json.dumps(day_names) + ''';
+        const dayNamesHe = ''' + json.dumps(day_names_he) + ''';
 
-        const cityData = ''' + json.dumps(city_data, ensure_ascii=False) + ''';
+        // City and origin mappings
+        const cityList = ''' + json.dumps(city_list, ensure_ascii=False) + ''';
+        const originList = ''' + json.dumps(origin_list, ensure_ascii=False) + ''';
+
+        // Area to city indices mapping
+        const areaToCities = ''' + json.dumps(area_to_cities_idx, ensure_ascii=False) + ''';
+
+        // Compact alarm data: [{t: timestamp, c: [city_indices], o: origin_index}]
+        const alarmData = ''' + json.dumps(compact_alarms, ensure_ascii=False) + ''';
 
         let alarmCombinedChart = null;
         let alarmDayCharts = [];
+
+        // Compute histogram based on current filters
+        function computeHistogram(originFilter, areaFilter, cityFilter) {
+            // Determine which city indices to include
+            let allowedCities = null;  // null means all
+
+            if (cityFilter !== '__all__') {
+                // Specific city selected
+                const cityIdx = cityList.indexOf(cityFilter);
+                if (cityIdx >= 0) {
+                    allowedCities = new Set([cityIdx]);
+                }
+            } else if (areaFilter !== '__all__') {
+                // Area selected, get all cities in that area
+                const areaCities = areaToCities[areaFilter];
+                if (areaCities) {
+                    allowedCities = new Set(areaCities);
+                }
+            }
+
+            // Determine origin filter
+            let allowedOrigin = null;  // null means all
+            if (originFilter !== '__all__') {
+                allowedOrigin = originList.indexOf(originFilter);
+            }
+
+            // Initialize histogram
+            const histogram = {};
+            days.forEach(day => {
+                histogram[day] = new Array(24).fill(0);
+            });
+
+            // Process alarms
+            alarmData.forEach(alarm => {
+                // Check origin filter
+                if (allowedOrigin !== null && alarm.o !== allowedOrigin) {
+                    return;
+                }
+
+                // Check city filter
+                if (allowedCities !== null) {
+                    const hasMatchingCity = alarm.c.some(c => allowedCities.has(c));
+                    if (!hasMatchingCity) {
+                        return;
+                    }
+                }
+
+                // Extract day and hour from timestamp
+                const dayStr = alarm.t.substring(0, 10);
+                const hour = parseInt(alarm.t.substring(11, 13), 10);
+
+                if (histogram[dayStr]) {
+                    histogram[dayStr][hour]++;
+                }
+            });
+
+            return histogram;
+        }
 
         // URL parameter handling
         function getUrlParam(param) {
@@ -469,47 +637,98 @@ html_content += '''                </select>
             return urlParams.get(param);
         }
 
-        function setUrlParam(param, value) {
+        function setUrlParams(params) {
             const url = new URL(window.location);
-            if (value && value !== '__total__') {
-                url.searchParams.set(param, value);
-            } else {
-                url.searchParams.delete(param);
-            }
+            Object.entries(params).forEach(([key, value]) => {
+                if (value && value !== '__all__') {
+                    url.searchParams.set(key, value);
+                } else {
+                    url.searchParams.delete(key);
+                }
+            });
             window.history.replaceState({}, '', url);
         }
 
         // Initialize Select2
         $(document).ready(function() {
-            $('#citySelect').select2({
-                placeholder: 'בחר עיר / Select city',
+            $('#originSelect, #areaSelect, #citySelect').select2({
                 allowClear: false,
-                width: '300px'
+                width: '200px'
             });
 
-            $('#citySelect').on('change', function() {
-                const city = this.value;
-                setUrlParam('city', city);
-                updateCharts(city);
+            // When area changes, update city dropdown
+            $('#areaSelect').on('change', function() {
+                const area = this.value;
+                updateCityOptions(area);
+                updateFromFilters();
+            });
+
+            $('#originSelect, #citySelect').on('change', function() {
+                updateFromFilters();
             });
 
             // Initial render
             initCharts();
 
-            // Check URL for city parameter
-            const urlCity = getUrlParam('city');
-            if (urlCity && cityData[urlCity]) {
-                $('#citySelect').val(urlCity).trigger('change.select2');
-                updateCharts(urlCity);
-            } else {
-                updateCharts('__total__');
-            }
+            // Check URL for parameters
+            const urlOrigin = getUrlParam('origin') || '__all__';
+            const urlArea = getUrlParam('area') || '__all__';
+            const urlCity = getUrlParam('city') || '__all__';
+
+            $('#originSelect').val(urlOrigin).trigger('change.select2');
+            $('#areaSelect').val(urlArea).trigger('change.select2');
+            updateCityOptions(urlArea);
+            $('#citySelect').val(urlCity).trigger('change.select2');
+
+            updateFromFilters();
         });
+
+        function updateCityOptions(area) {
+            const citySelect = $('#citySelect');
+            const currentCity = citySelect.val();
+
+            // Clear and rebuild options
+            citySelect.empty();
+            citySelect.append('<option value="__all__">הכל / All</option>');
+
+            if (area === '__all__') {
+                // Show all cities
+                cityList.forEach(city => {
+                    citySelect.append(`<option value="${city}">${city}</option>`);
+                });
+            } else {
+                // Show only cities in selected area
+                const areaCityIndices = areaToCities[area] || [];
+                areaCityIndices.forEach(idx => {
+                    const city = cityList[idx];
+                    citySelect.append(`<option value="${city}">${city}</option>`);
+                });
+            }
+
+            // Try to keep current selection if still valid
+            if (citySelect.find(`option[value="${currentCity}"]`).length > 0) {
+                citySelect.val(currentCity);
+            } else {
+                citySelect.val('__all__');
+            }
+            citySelect.trigger('change.select2');
+        }
+
+        function updateFromFilters() {
+            const origin = $('#originSelect').val();
+            const area = $('#areaSelect').val();
+            const city = $('#citySelect').val();
+
+            setUrlParams({origin, area, city});
+
+            const histogram = computeHistogram(origin, area, city);
+            updateCharts(histogram, origin, area, city);
+        }
 
         function initCharts() {
             // Create legend
             const legendHtml = days.map((day, i) =>
-                `<div class="legend-item"><div class="legend-color" style="background:${colors[i]}"></div>${dayNamesHe[i]} | ${dayNames[i]}</div>`
+                `<div class="legend-item"><div class="legend-color" style="background:${colors[i % colors.length]}"></div>${dayNamesHe[i]} | ${dayNames[i]}</div>`
             ).join('');
             document.getElementById('alarmLegend').innerHTML = legendHtml;
 
@@ -545,8 +764,8 @@ html_content += '''                </select>
                     datasets: days.map((day, i) => ({
                         label: dayNames[i],
                         data: new Array(24).fill(0),
-                        backgroundColor: colors[i],
-                        borderColor: colors[i],
+                        backgroundColor: colors[i % colors.length],
+                        borderColor: colors[i % colors.length],
                         borderWidth: 1
                     }))
                 },
@@ -580,8 +799,8 @@ html_content += '''                </select>
                     datasets: [{
                         label: 'Count',
                         data: new Array(24).fill(0),
-                        backgroundColor: colors[colorIndex],
-                        borderColor: colors[colorIndex],
+                        backgroundColor: colors[colorIndex % colors.length],
+                        borderColor: colors[colorIndex % colors.length],
                         borderWidth: 1
                     }]
                 },
@@ -604,43 +823,45 @@ html_content += '''                </select>
             });
         }
 
-        function updateCharts(city) {
-            const data = cityData[city] || cityData['__total__'];
-            const displayName = city === '__total__' ? 'הכל / Total' : city;
-            document.getElementById('currentCityDisplay').textContent = displayName;
+        function updateCharts(histogram, origin, area, city) {
+            // Build display name
+            let displayParts = [];
+            if (origin !== '__all__') displayParts.push(origin);
+            if (area !== '__all__') displayParts.push(area);
+            if (city !== '__all__') displayParts.push(city);
+            const displayName = displayParts.length > 0 ? displayParts.join(' | ') : 'הכל / All';
+            document.getElementById('currentFilterDisplay').textContent = displayName;
 
-            // Update alarm charts
-            updateChartData(alarmCombinedChart, data.alarm);
+            // Update combined chart
             days.forEach((day, i) => {
-                alarmDayCharts[i].data.datasets[0].data = data.alarm[day];
+                alarmCombinedChart.data.datasets[i].data = histogram[day];
+            });
+            alarmCombinedChart.update();
+
+            // Update day charts
+            days.forEach((day, i) => {
+                alarmDayCharts[i].data.datasets[0].data = histogram[day];
                 alarmDayCharts[i].update();
             });
 
             // Update stats
-            updateStats('alarm', data.alarm, 'התרעות', 'Alarms');
+            updateStats(histogram);
 
             // Update change indicators
-            updateChangeIndicators('alarm', data.alarm, 'התרעות', 'alarms');
+            updateChangeIndicators(histogram);
         }
 
-        function updateChartData(chart, data) {
-            days.forEach((day, i) => {
-                chart.data.datasets[i].data = data[day];
-            });
-            chart.update();
-        }
-
-        function updateStats(type, data, labelHe, labelEn) {
+        function updateStats(histogram) {
             let total = 0;
             let rows = '';
             days.forEach((day, i) => {
-                const sum = data[day].reduce((a, b) => a + b, 0);
+                const sum = histogram[day].reduce((a, b) => a + b, 0);
                 total += sum;
                 rows += `
                     <tr>
-                        <td><span class="color-indicator" style="background: ${colors[i]}"></span> ${dayNamesHe[i]}</td>
+                        <td><span class="color-indicator" style="background: ${colors[i % colors.length]}"></span> ${dayNamesHe[i]}</td>
                         <td class="day-label">${dayNames[i]}</td>
-                        <td style="color: ${colors[i]}">${sum}</td>
+                        <td style="color: ${colors[i % colors.length]}">${sum}</td>
                     </tr>`;
             });
             rows += `
@@ -656,25 +877,25 @@ html_content += '''                </select>
                         <tr>
                             <th>יום</th>
                             <th>Day</th>
-                            <th>${labelHe} / ${labelEn}</th>
+                            <th>התרעות / Alarms</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${rows}
                     </tbody>
                 </table>`;
-            document.getElementById(type + 'Stats').innerHTML = html;
+            document.getElementById('alarmStats').innerHTML = html;
         }
 
-        function updateChangeIndicators(type, data, labelHe, labelEn) {
+        function updateChangeIndicators(histogram) {
             days.forEach((day, i) => {
-                const elem = document.getElementById(type + 'Change' + i);
+                const elem = document.getElementById('alarmChange' + i);
                 if (i === 0) {
                     elem.style.display = 'none';
                     return;
                 }
-                const prev = data[days[i-1]].reduce((a, b) => a + b, 0);
-                const curr = data[day].reduce((a, b) => a + b, 0);
+                const prev = histogram[days[i-1]].reduce((a, b) => a + b, 0);
+                const curr = histogram[day].reduce((a, b) => a + b, 0);
                 if (prev === 0) {
                     elem.style.display = 'none';
                     return;
@@ -685,7 +906,7 @@ html_content += '''                </select>
                 const cls = change > 0 ? 'change-up' : 'change-down';
                 elem.className = 'change-indicator ' + cls;
                 elem.style.display = 'block';
-                elem.innerHTML = `${arrow} ${Math.abs(change)} ${labelHe} (${pct > 0 ? '+' : ''}${pct}%) מהיום הקודם | ${arrow} ${Math.abs(change)} ${labelEn} from previous day`;
+                elem.innerHTML = `${arrow} ${Math.abs(change)} התרעות (${pct > 0 ? '+' : ''}${pct}%) מהיום הקודם | ${arrow} ${Math.abs(change)} alarms from previous day`;
             });
         }
     </script>
