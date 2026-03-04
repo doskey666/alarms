@@ -564,6 +564,10 @@ html_content += '''                </select>
         const cityList = ''' + json.dumps(city_list, ensure_ascii=False) + ''';
         const originList = ''' + json.dumps(origin_list, ensure_ascii=False) + ''';
 
+        // Origin display names and colors
+        const originNames = {'': 'לא ידוע / Unknown', 'Iran': 'איראן / Iran', 'Lebanon': 'לבנון / Lebanon', 'FA': 'FA'};
+        const originColors = {'': '#95a5a6', 'Iran': '#e74c3c', 'Lebanon': '#27ae60', 'FA': '#3498db'};
+
         // Area to city indices mapping
         const areaToCities = ''' + json.dumps(area_to_cities_idx, ensure_ascii=False) + ''';
 
@@ -574,6 +578,7 @@ html_content += '''                </select>
         let alarmDayCharts = [];
 
         // Compute histogram based on current filters
+        // Returns: { combined: {day: [24 hourly counts]}, byOrigin: {day: {originIdx: [24 hourly counts]}} }
         function computeHistogram(originFilter, areaFilter, cityFilter) {
             // Determine which city indices to include
             let allowedCities = null;  // null means all
@@ -598,10 +603,15 @@ html_content += '''                </select>
                 allowedOrigin = originList.indexOf(originFilter);
             }
 
-            // Initialize histogram
-            const histogram = {};
+            // Initialize histograms
+            const combined = {};
+            const byOrigin = {};
             days.forEach(day => {
-                histogram[day] = new Array(24).fill(0);
+                combined[day] = new Array(24).fill(0);
+                byOrigin[day] = {};
+                originList.forEach((_, idx) => {
+                    byOrigin[day][idx] = new Array(24).fill(0);
+                });
             });
 
             // Process alarms
@@ -623,12 +633,13 @@ html_content += '''                </select>
                 const dayStr = alarm.t.substring(0, 10);
                 const hour = parseInt(alarm.t.substring(11, 13), 10);
 
-                if (histogram[dayStr]) {
-                    histogram[dayStr][hour]++;
+                if (combined[dayStr]) {
+                    combined[dayStr][hour]++;
+                    byOrigin[dayStr][alarm.o][hour]++;
                 }
             });
 
-            return histogram;
+            return { combined, byOrigin };
         }
 
         // URL parameter handling
@@ -721,19 +732,24 @@ html_content += '''                </select>
 
             setUrlParams({origin, area, city});
 
-            const histogram = computeHistogram(origin, area, city);
-            updateCharts(histogram, origin, area, city);
+            const histogramData = computeHistogram(origin, area, city);
+            updateCharts(histogramData, origin, area, city);
         }
 
         function initCharts() {
-            // Create legend
+            // Create legend for combined chart (by day)
             const legendHtml = days.map((day, i) =>
                 `<div class="legend-item"><div class="legend-color" style="background:${colors[i % colors.length]}"></div>${dayNamesHe[i]} | ${dayNames[i]}</div>`
             ).join('');
             document.getElementById('alarmLegend').innerHTML = legendHtml;
 
-            // Create day chart containers
-            let alarmDayHtml = '';
+            // Create origin legend for day charts
+            const originLegendHtml = originList.filter(o => o !== '').map(origin =>
+                `<div class="legend-item"><div class="legend-color" style="background:${originColors[origin]}"></div>${originNames[origin]}</div>`
+            ).join('');
+
+            // Create day chart containers with origin legend
+            let alarmDayHtml = `<div class="origin-legend" style="display:flex;justify-content:center;gap:20px;margin-bottom:20px;flex-wrap:wrap;">${originLegendHtml}</div>`;
             days.forEach((day, i) => {
                 alarmDayHtml += `
                     <div class="day-chart">
@@ -749,9 +765,9 @@ html_content += '''                </select>
             // Initialize combined chart
             alarmCombinedChart = createCombinedChart('alarmCombinedChart');
 
-            // Initialize day charts
+            // Initialize day charts (stacked by origin)
             days.forEach((day, i) => {
-                alarmDayCharts.push(createDayChart('alarmChart' + i, i));
+                alarmDayCharts.push(createDayChart('alarmChart' + i));
             });
         }
 
@@ -790,19 +806,30 @@ html_content += '''                </select>
             });
         }
 
-        function createDayChart(canvasId, colorIndex) {
+        function createDayChart(canvasId) {
             const ctx = document.getElementById(canvasId).getContext('2d');
+            // Create datasets for each origin (excluding empty/unknown for cleaner display)
+            const datasets = originList.filter(o => o !== '').map((origin, i) => ({
+                label: originNames[origin],
+                data: new Array(24).fill(0),
+                backgroundColor: originColors[origin],
+                borderColor: originColors[origin],
+                borderWidth: 1
+            }));
+            // Add unknown origin dataset at the end
+            datasets.push({
+                label: originNames[''],
+                data: new Array(24).fill(0),
+                backgroundColor: originColors[''],
+                borderColor: originColors[''],
+                borderWidth: 1
+            });
+
             return new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: hours,
-                    datasets: [{
-                        label: 'Count',
-                        data: new Array(24).fill(0),
-                        backgroundColor: colors[colorIndex % colors.length],
-                        borderColor: colors[colorIndex % colors.length],
-                        borderWidth: 1
-                    }]
+                    datasets: datasets
                 },
                 options: {
                     responsive: true,
@@ -810,10 +837,12 @@ html_content += '''                </select>
                     plugins: { legend: { display: false } },
                     scales: {
                         x: {
+                            stacked: true,
                             ticks: { color: '#aaa', maxRotation: 45, minRotation: 45 },
                             grid: { color: 'rgba(255,255,255,0.1)' }
                         },
                         y: {
+                            stacked: true,
                             beginAtZero: true,
                             ticks: { color: '#aaa' },
                             grid: { color: 'rgba(255,255,255,0.1)' }
@@ -823,7 +852,9 @@ html_content += '''                </select>
             });
         }
 
-        function updateCharts(histogram, origin, area, city) {
+        function updateCharts(histogramData, origin, area, city) {
+            const { combined, byOrigin } = histogramData;
+
             // Build display name
             let displayParts = [];
             if (origin !== '__all__') displayParts.push(origin);
@@ -832,23 +863,31 @@ html_content += '''                </select>
             const displayName = displayParts.length > 0 ? displayParts.join(' | ') : 'הכל / All';
             document.getElementById('currentFilterDisplay').textContent = displayName;
 
-            // Update combined chart
+            // Update combined chart (stacked by day)
             days.forEach((day, i) => {
-                alarmCombinedChart.data.datasets[i].data = histogram[day];
+                alarmCombinedChart.data.datasets[i].data = combined[day];
             });
             alarmCombinedChart.update();
 
-            // Update day charts
+            // Update day charts (stacked by origin)
+            // Dataset order: known origins first (excluding ''), then unknown ('')
+            const knownOrigins = originList.filter(o => o !== '');
             days.forEach((day, i) => {
-                alarmDayCharts[i].data.datasets[0].data = histogram[day];
+                knownOrigins.forEach((origin, j) => {
+                    const originIdx = originList.indexOf(origin);
+                    alarmDayCharts[i].data.datasets[j].data = byOrigin[day][originIdx];
+                });
+                // Unknown origin is last dataset
+                const unknownIdx = originList.indexOf('');
+                alarmDayCharts[i].data.datasets[knownOrigins.length].data = byOrigin[day][unknownIdx];
                 alarmDayCharts[i].update();
             });
 
             // Update stats
-            updateStats(histogram);
+            updateStats(combined);
 
             // Update change indicators
-            updateChangeIndicators(histogram);
+            updateChangeIndicators(combined);
         }
 
         function updateStats(histogram) {
