@@ -90,10 +90,24 @@ for loc in all_locations:
 main_cities = sorted(city_to_locations.keys())
 print(f"Unique main cities (grouped): {len(main_cities)}")
 
-# Group by day
-all_days = ['2026-02-28', '2026-03-01', '2026-03-02', '2026-03-03']
-all_day_names = ['Saturday (Feb 28)', 'Sunday (Mar 1)', 'Monday (Mar 2)', 'Tuesday (Mar 3)']
-all_day_names_he = ['שבת (28 בפברואר)', 'ראשון (1 במרץ)', 'שני (2 במרץ)', 'שלישי (3 במרץ)']
+# Group by day - dynamically from alarm data
+all_days = sorted(set(a['datetime'].strftime('%Y-%m-%d') for a in war_alarms))
+
+# Generate day names dynamically
+day_name_en = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+day_name_he = ['שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת', 'ראשון']
+month_name_en = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+month_name_he = ['', 'בינואר', 'בפברואר', 'במרץ', 'באפריל', 'במאי', 'ביוני', 'ביולי', 'באוגוסט', 'בספטמבר', 'באוקטובר', 'בנובמבר', 'בדצמבר']
+
+all_day_names = []
+all_day_names_he = []
+for day_str in all_days:
+    dt = datetime.strptime(day_str, '%Y-%m-%d')
+    weekday = dt.weekday()  # 0=Monday, 6=Sunday
+    day_num = dt.day
+    month_num = dt.month
+    all_day_names.append(f"{day_name_en[weekday]} ({month_name_en[month_num]} {day_num})")
+    all_day_names_he.append(f"{day_name_he[weekday]} ({day_num} {month_name_he[month_num]})")
 
 def calculate_histograms(locations_filter=None):
     """Calculate histogram for specific locations or all locations"""
