@@ -565,7 +565,7 @@ html_content += '''                </select>
         const originList = ''' + json.dumps(origin_list, ensure_ascii=False) + ''';
 
         // Origin display names and colors
-        const originNames = {'': 'לא ידוע / Unknown', 'Iran': 'איראן / Iran', 'Lebanon': 'לבנון / Lebanon', 'FA': 'FA'};
+        const originNames = {'': 'לא ידוע / Unknown', 'Iran': 'איראן / Iran', 'Lebanon': 'לבנון / Lebanon', 'FA': 'התרעת שווא / False Alarm'};
         const originColors = {'': '#95a5a6', 'Iran': '#e74c3c', 'Lebanon': '#27ae60', 'FA': '#3498db'};
 
         // Area to city indices mapping
