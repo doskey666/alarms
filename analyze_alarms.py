@@ -743,8 +743,9 @@ html_content += '''                </select>
             ).join('');
             document.getElementById('alarmLegend').innerHTML = legendHtml;
 
-            // Create origin legend for day charts
-            const originLegendHtml = originList.filter(o => o !== '').map(origin =>
+            // Create origin legend for day charts (known origins first, then unknown)
+            const knownOrigins = originList.filter(o => o !== '');
+            const originLegendHtml = [...knownOrigins, ''].map(origin =>
                 `<div class="legend-item"><div class="legend-color" style="background:${originColors[origin]}"></div>${originNames[origin]}</div>`
             ).join('');
 
