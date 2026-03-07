@@ -266,7 +266,7 @@ html_content = '''<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Missile Alarms Analysis - War 2026 | ניתוח התרעות טילים - מלחמה 2026</title>
+    <title id="pageTitle">ניתוח התרעות טילים - מלחמה 2026</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
@@ -288,23 +288,49 @@ html_content = '''<!DOCTYPE html>
             max-width: 1600px;
             margin: 0 auto;
         }
+        .header {
+            position: relative;
+            margin-bottom: 20px;
+        }
         h1 {
             text-align: center;
-            margin-bottom: 5px;
+            margin-bottom: 10px;
             font-size: 2.2em;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-        }
-        .title-en {
-            text-align: center;
-            font-size: 1.4em;
-            color: #aaa;
-            margin-bottom: 10px;
         }
         .subtitle {
             text-align: center;
             margin-bottom: 20px;
             color: #888;
             font-size: 1em;
+        }
+        .lang-toggle {
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: flex;
+            gap: 5px;
+        }
+        [dir="ltr"] .lang-toggle {
+            left: auto;
+            right: 0;
+        }
+        .lang-btn {
+            padding: 8px 16px;
+            border: 1px solid rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            cursor: pointer;
+            border-radius: 5px;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+        }
+        .lang-btn:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        .lang-btn.active {
+            background: #e74c3c;
+            border-color: #e74c3c;
         }
         .controls {
             display: flex;
@@ -385,11 +411,6 @@ html_content = '''<!DOCTYPE html>
             border-bottom: none;
             background: rgba(255,255,255,0.05);
         }
-        .stats-table .day-label {
-            font-weight: normal;
-            font-size: 0.9em;
-            color: #aaa;
-        }
         .stats-table .color-indicator {
             display: inline-block;
             width: 12px;
@@ -397,6 +418,10 @@ html_content = '''<!DOCTYPE html>
             border-radius: 3px;
             margin-left: 8px;
             vertical-align: middle;
+        }
+        [dir="ltr"] .stats-table .color-indicator {
+            margin-left: 0;
+            margin-right: 8px;
         }
         .chart-container {
             background: rgba(255,255,255,0.05);
@@ -486,15 +511,20 @@ html_content = '''<!DOCTYPE html>
 </head>
 <body>
     <div class="container">
-        <h1>התרעות טילים</h1>
-        <div class="title-en">Missile Alarms Analysis</div>
-        <p class="subtitle">מלחמה 2026 | War 2026</p>
+        <div class="header">
+            <div class="lang-toggle">
+                <button class="lang-btn active" data-lang="he">עברית</button>
+                <button class="lang-btn" data-lang="en">English</button>
+            </div>
+            <h1 id="mainTitle">התרעות טילים</h1>
+            <p class="subtitle" id="subtitleText">מלחמה 2026</p>
+        </div>
 
         <div class="controls">
             <div class="filter-group">
-                <label>מקור / Origin:</label>
+                <label id="labelOrigin">מקור:</label>
                 <select id="originSelect">
-                    <option value="__all__">הכל / All</option>
+                    <option value="__all__" data-he="הכל" data-en="All">הכל</option>
 '''
 
 # Add origin options
@@ -504,9 +534,9 @@ for origin in all_origins:
 html_content += '''                </select>
             </div>
             <div class="filter-group">
-                <label>אזור / Area:</label>
+                <label id="labelArea">אזור:</label>
                 <select id="areaSelect">
-                    <option value="__all__">הכל / All</option>
+                    <option value="__all__" data-he="הכל" data-en="All">הכל</option>
 '''
 
 # Add area options
@@ -516,9 +546,9 @@ for area in area_list:
 html_content += '''                </select>
             </div>
             <div class="filter-group">
-                <label>עיר / City:</label>
+                <label id="labelCity">עיר:</label>
                 <select id="citySelect">
-                    <option value="__all__">הכל / All</option>
+                    <option value="__all__" data-he="הכל" data-en="All">הכל</option>
 '''
 
 # Add city options sorted alphabetically
@@ -529,25 +559,25 @@ html_content += '''                </select>
             </div>
         </div>
 
-        <div class="current-filter" id="currentFilterDisplay">הכל / All</div>
+        <div class="current-filter" id="currentFilterDisplay">הכל</div>
 
         <div class="stats-table-container" id="alarmStats"></div>
 
         <div class="chart-container">
-            <h2 class="chart-title">התפלגות שעתית - כל הימים (מוערם) | Hourly Distribution - All Days (Stacked)</h2>
+            <h2 class="chart-title" id="chartTitle">התפלגות שעתית - כל הימים (מוערם)</h2>
             <div class="chart-wrapper">
                 <canvas id="alarmCombinedChart"></canvas>
             </div>
             <div class="legend" id="alarmLegend"></div>
         </div>
 
-        <h2 class="section-title">פירוט יומי | Daily Breakdown</h2>
+        <h2 class="section-title" id="dailyBreakdownTitle">פירוט יומי</h2>
         <div id="alarmDayCharts"></div>
     </div>
 
     <footer>
-        <p>מקור: פיקוד העורף | Data source: Israeli Home Front Command</p>
-        <p>Data provided by <a href="https://github.com/yuval-harpaz/alarms" target="_blank">yuval-harpaz/alarms</a></p>
+        <p id="footerSource">מקור: פיקוד העורף</p>
+        <p id="footerData">מידע מסופק על ידי <a href="https://github.com/yuval-harpaz/alarms" target="_blank">yuval-harpaz/alarms</a></p>
     </footer>
 
     <script>
@@ -560,13 +590,137 @@ html_content += '''                </select>
         const dayNames = ''' + json.dumps(day_names) + ''';
         const dayNamesHe = ''' + json.dumps(day_names_he) + ''';
 
+        // Translations
+        const translations = {
+            he: {
+                pageTitle: 'ניתוח התרעות טילים - מלחמה 2026',
+                mainTitle: 'התרעות טילים',
+                subtitle: 'מלחמה 2026',
+                labelOrigin: 'מקור:',
+                labelArea: 'אזור:',
+                labelCity: 'עיר:',
+                all: 'הכל',
+                chartTitle: 'התפלגות שעתית - כל הימים (מוערם)',
+                dailyBreakdown: 'פירוט יומי',
+                day: 'יום',
+                alarms: 'התרעות',
+                total: 'סה"כ',
+                footerSource: 'מקור: פיקוד העורף',
+                footerData: 'מידע מסופק על ידי',
+                fromPrevDay: 'מהיום הקודם',
+                origins: {
+                    '': 'לא ידוע',
+                    'Iran': 'איראן',
+                    'Lebanon': 'לבנון',
+                    'FA': 'התרעת שווא'
+                }
+            },
+            en: {
+                pageTitle: 'Missile Alarms Analysis - War 2026',
+                mainTitle: 'Missile Alarms',
+                subtitle: 'War 2026',
+                labelOrigin: 'Origin:',
+                labelArea: 'Area:',
+                labelCity: 'City:',
+                all: 'All',
+                chartTitle: 'Hourly Distribution - All Days (Stacked)',
+                dailyBreakdown: 'Daily Breakdown',
+                day: 'Day',
+                alarms: 'Alarms',
+                total: 'Total',
+                footerSource: 'Source: Israeli Home Front Command',
+                footerData: 'Data provided by',
+                fromPrevDay: 'from previous day',
+                origins: {
+                    '': 'Unknown',
+                    'Iran': 'Iran',
+                    'Lebanon': 'Lebanon',
+                    'FA': 'False Alarm'
+                }
+            }
+        };
+
+        let currentLang = localStorage.getItem('lang') || 'he';
+
         // City and origin mappings
         const cityList = ''' + json.dumps(city_list, ensure_ascii=False) + ''';
         const originList = ''' + json.dumps(origin_list, ensure_ascii=False) + ''';
 
-        // Origin display names and colors
-        const originNames = {'': 'לא ידוע / Unknown', 'Iran': 'איראן / Iran', 'Lebanon': 'לבנון / Lebanon', 'FA': 'התרעת שווא / False Alarm'};
+        // Origin colors
         const originColors = {'': '#95a5a6', 'Iran': '#e74c3c', 'Lebanon': '#27ae60', 'FA': '#3498db'};
+
+        function getOriginName(origin) {
+            return translations[currentLang].origins[origin] || origin;
+        }
+
+        function t(key) {
+            return translations[currentLang][key] || key;
+        }
+
+        function getDayName(index) {
+            return currentLang === 'he' ? dayNamesHe[index] : dayNames[index];
+        }
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('lang', lang);
+
+            // Update document direction
+            document.documentElement.lang = lang;
+            document.documentElement.dir = lang === 'he' ? 'rtl' : 'ltr';
+
+            // Update language buttons
+            document.querySelectorAll('.lang-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.lang === lang);
+            });
+
+            // Update static text
+            document.getElementById('pageTitle').textContent = t('pageTitle');
+            document.getElementById('mainTitle').textContent = t('mainTitle');
+            document.getElementById('subtitleText').textContent = t('subtitle');
+            document.getElementById('labelOrigin').textContent = t('labelOrigin');
+            document.getElementById('labelArea').textContent = t('labelArea');
+            document.getElementById('labelCity').textContent = t('labelCity');
+            document.getElementById('chartTitle').textContent = t('chartTitle');
+            document.getElementById('dailyBreakdownTitle').textContent = t('dailyBreakdown');
+            document.getElementById('footerSource').textContent = t('footerSource');
+            document.getElementById('footerData').innerHTML = t('footerData') + ' <a href="https://github.com/yuval-harpaz/alarms" target="_blank">yuval-harpaz/alarms</a>';
+
+            // Update "All" option text in selects
+            document.querySelectorAll('option[value="__all__"]').forEach(opt => {
+                opt.textContent = t('all');
+            });
+
+            // Refresh charts and legends
+            updateFromFilters();
+            updateLegends();
+        }
+
+        function updateLegends() {
+            // Update combined chart legend (by day)
+            const legendHtml = days.map((day, i) =>
+                `<div class="legend-item"><div class="legend-color" style="background:${colors[i % colors.length]}"></div>${getDayName(i)}</div>`
+            ).join('');
+            document.getElementById('alarmLegend').innerHTML = legendHtml;
+
+            // Update day titles
+            days.forEach((day, i) => {
+                const titleEl = document.getElementById('dayTitle' + i);
+                if (titleEl) titleEl.textContent = getDayName(i);
+            });
+
+            // Update origin legend
+            updateOriginLegend();
+        }
+
+        function updateOriginLegend() {
+            const knownOrigins = originList.filter(o => o !== '');
+            const originLegendHtml = [...knownOrigins, ''].map(origin =>
+                `<div class="legend-item"><div class="legend-color" style="background:${originColors[origin]}"></div>${getOriginName(origin)}</div>`
+            ).join('');
+            const legendEl = document.getElementById('originLegend');
+            if (legendEl) legendEl.innerHTML = originLegendHtml;
+        }
 
         // Area to city indices mapping
         const areaToCities = ''' + json.dumps(area_to_cities_idx, ensure_ascii=False) + ''';
@@ -667,6 +821,11 @@ html_content += '''                </select>
                 width: '200px'
             });
 
+            // Language toggle
+            document.querySelectorAll('.lang-btn').forEach(btn => {
+                btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
+            });
+
             // When area changes, update city dropdown
             $('#areaSelect').on('change', function() {
                 const area = this.value;
@@ -685,13 +844,15 @@ html_content += '''                </select>
             const urlOrigin = getUrlParam('origin') || '__all__';
             const urlArea = getUrlParam('area') || '__all__';
             const urlCity = getUrlParam('city') || '__all__';
+            const urlLang = getUrlParam('lang');
 
             $('#originSelect').val(urlOrigin).trigger('change.select2');
             $('#areaSelect').val(urlArea).trigger('change.select2');
             updateCityOptions(urlArea);
             $('#citySelect').val(urlCity).trigger('change.select2');
 
-            updateFromFilters();
+            // Set initial language
+            setLanguage(urlLang || currentLang);
         });
 
         function updateCityOptions(area) {
@@ -738,23 +899,14 @@ html_content += '''                </select>
 
         function initCharts() {
             // Create legend for combined chart (by day)
-            const legendHtml = days.map((day, i) =>
-                `<div class="legend-item"><div class="legend-color" style="background:${colors[i % colors.length]}"></div>${dayNamesHe[i]} | ${dayNames[i]}</div>`
-            ).join('');
-            document.getElementById('alarmLegend').innerHTML = legendHtml;
+            updateLegends();
 
-            // Create origin legend for day charts (known origins first, then unknown)
-            const knownOrigins = originList.filter(o => o !== '');
-            const originLegendHtml = [...knownOrigins, ''].map(origin =>
-                `<div class="legend-item"><div class="legend-color" style="background:${originColors[origin]}"></div>${originNames[origin]}</div>`
-            ).join('');
-
-            // Create day chart containers with origin legend
-            let alarmDayHtml = `<div class="origin-legend" style="display:flex;justify-content:center;gap:20px;margin-bottom:20px;flex-wrap:wrap;">${originLegendHtml}</div>`;
+            // Create day chart containers (legend will be added dynamically)
+            let alarmDayHtml = `<div id="originLegend" class="origin-legend" style="display:flex;justify-content:center;gap:20px;margin-bottom:20px;flex-wrap:wrap;"></div>`;
             days.forEach((day, i) => {
                 alarmDayHtml += `
                     <div class="day-chart">
-                        <h3>${dayNamesHe[i]} | ${dayNames[i]}</h3>
+                        <h3 id="dayTitle${i}">${getDayName(i)}</h3>
                         <div class="day-chart-wrapper">
                             <canvas id="alarmChart${i}"></canvas>
                         </div>
@@ -762,6 +914,9 @@ html_content += '''                </select>
                     </div>`;
             });
             document.getElementById('alarmDayCharts').innerHTML = alarmDayHtml;
+
+            // Update origin legend
+            updateOriginLegend();
 
             // Initialize combined chart
             alarmCombinedChart = createCombinedChart('alarmCombinedChart');
@@ -811,7 +966,7 @@ html_content += '''                </select>
             const ctx = document.getElementById(canvasId).getContext('2d');
             // Create datasets for each origin (excluding empty/unknown for cleaner display)
             const datasets = originList.filter(o => o !== '').map((origin, i) => ({
-                label: originNames[origin],
+                label: getOriginName(origin),
                 data: new Array(24).fill(0),
                 backgroundColor: originColors[origin],
                 borderColor: originColors[origin],
@@ -819,7 +974,7 @@ html_content += '''                </select>
             }));
             // Add unknown origin dataset at the end
             datasets.push({
-                label: originNames[''],
+                label: getOriginName(''),
                 data: new Array(24).fill(0),
                 backgroundColor: originColors[''],
                 borderColor: originColors[''],
@@ -861,7 +1016,7 @@ html_content += '''                </select>
             if (origin !== '__all__') displayParts.push(origin);
             if (area !== '__all__') displayParts.push(area);
             if (city !== '__all__') displayParts.push(city);
-            const displayName = displayParts.length > 0 ? displayParts.join(' | ') : 'הכל / All';
+            const displayName = displayParts.length > 0 ? displayParts.join(' | ') : t('all');
             document.getElementById('currentFilterDisplay').textContent = displayName;
 
             // Update combined chart (stacked by day)
@@ -899,15 +1054,13 @@ html_content += '''                </select>
                 total += sum;
                 rows += `
                     <tr>
-                        <td><span class="color-indicator" style="background: ${colors[i % colors.length]}"></span> ${dayNamesHe[i]}</td>
-                        <td class="day-label">${dayNames[i]}</td>
+                        <td><span class="color-indicator" style="background: ${colors[i % colors.length]}"></span> ${getDayName(i)}</td>
                         <td style="color: ${colors[i % colors.length]}">${sum}</td>
                     </tr>`;
             });
             rows += `
                 <tr>
-                    <td><strong>סה"כ</strong></td>
-                    <td class="day-label"><strong>Total</strong></td>
+                    <td><strong>${t('total')}</strong></td>
                     <td style="color: #ffa502"><strong>${total}</strong></td>
                 </tr>`;
 
@@ -915,9 +1068,8 @@ html_content += '''                </select>
                 <table class="stats-table">
                     <thead>
                         <tr>
-                            <th>יום</th>
-                            <th>Day</th>
-                            <th>התרעות / Alarms</th>
+                            <th>${t('day')}</th>
+                            <th>${t('alarms')}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -946,7 +1098,7 @@ html_content += '''                </select>
                 const cls = change > 0 ? 'change-up' : 'change-down';
                 elem.className = 'change-indicator ' + cls;
                 elem.style.display = 'block';
-                elem.innerHTML = `${arrow} ${Math.abs(change)} התרעות (${pct > 0 ? '+' : ''}${pct}%) מהיום הקודם | ${arrow} ${Math.abs(change)} alarms from previous day`;
+                elem.innerHTML = `${arrow} ${Math.abs(change)} ${t('alarms')} (${pct > 0 ? '+' : ''}${pct}%) ${t('fromPrevDay')}`;
             });
         }
     </script>
