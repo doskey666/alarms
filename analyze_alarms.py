@@ -613,6 +613,24 @@ html_content += '''                </select>
                     'Iran': 'איראן',
                     'Lebanon': 'לבנון',
                     'FA': 'התרעת שווא'
+                },
+                areas: {
+                    'מישור החוף': 'מישור החוף',
+                    'גוש דן': 'גוש דן',
+                    'השפלה': 'השפלה',
+                    'הרי יהודה': 'הרי יהודה',
+                    'אזור ירושלים': 'אזור ירושלים',
+                    'הרי שומרון': 'הרי שומרון',
+                    'הגליל': 'הגליל',
+                    'עמק החולה': 'עמק החולה',
+                    'רמת הגולן': 'רמת הגולן',
+                    'עמק יזרעאל': 'עמק יזרעאל',
+                    'עמק בית שאן': 'עמק בית שאן',
+                    'בקעת הירדן': 'בקעת הירדן',
+                    'הנגב': 'הנגב',
+                    'עוטף עזה': 'עוטף עזה',
+                    'הערבה': 'הערבה',
+                    'חיפה והקריות': 'חיפה והקריות'
                 }
             },
             en: {
@@ -636,6 +654,24 @@ html_content += '''                </select>
                     'Iran': 'Iran',
                     'Lebanon': 'Lebanon',
                     'FA': 'False Alarm'
+                },
+                areas: {
+                    'מישור החוף': 'Coastal Plain',
+                    'גוש דן': 'Gush Dan',
+                    'השפלה': 'Shfela',
+                    'הרי יהודה': 'Judean Mountains',
+                    'אזור ירושלים': 'Jerusalem Area',
+                    'הרי שומרון': 'Samarian Mountains',
+                    'הגליל': 'Galilee',
+                    'עמק החולה': 'Hula Valley',
+                    'רמת הגולן': 'Golan Heights',
+                    'עמק יזרעאל': 'Jezreel Valley',
+                    'עמק בית שאן': 'Beit Shean Valley',
+                    'בקעת הירדן': 'Jordan Valley',
+                    'הנגב': 'Negev',
+                    'עוטף עזה': 'Gaza Envelope',
+                    'הערבה': 'Arava',
+                    'חיפה והקריות': 'Haifa & Krayot'
                 }
             }
         };
@@ -651,6 +687,10 @@ html_content += '''                </select>
 
         function getOriginName(origin) {
             return translations[currentLang].origins[origin] || origin;
+        }
+
+        function getAreaName(area) {
+            return translations[currentLang].areas[area] || area;
         }
 
         function t(key) {
@@ -689,6 +729,14 @@ html_content += '''                </select>
             // Update "All" option text in selects
             document.querySelectorAll('option[value="__all__"]').forEach(opt => {
                 opt.textContent = t('all');
+            });
+
+            // Update area dropdown options
+            $('#areaSelect option').each(function() {
+                const val = $(this).val();
+                if (val !== '__all__') {
+                    $(this).text(getAreaName(val));
+                }
             });
 
             // Refresh charts and legends
@@ -1011,10 +1059,10 @@ html_content += '''                </select>
         function updateCharts(histogramData, origin, area, city) {
             const { combined, byOrigin } = histogramData;
 
-            // Build display name
+            // Build display name with translations
             let displayParts = [];
-            if (origin !== '__all__') displayParts.push(origin);
-            if (area !== '__all__') displayParts.push(area);
+            if (origin !== '__all__') displayParts.push(getOriginName(origin));
+            if (area !== '__all__') displayParts.push(getAreaName(area));
             if (city !== '__all__') displayParts.push(city);
             const displayName = displayParts.length > 0 ? displayParts.join(' | ') : t('all');
             document.getElementById('currentFilterDisplay').textContent = displayName;
