@@ -191,7 +191,7 @@ def get_city_areas(city_name):
 all_days = sorted(set(a['datetime'].strftime('%Y-%m-%d') for a in war_alarms))
 
 # Generate day names dynamically
-day_name_en = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+day_name_en = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 day_name_he = ['שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת', 'ראשון']
 month_name_en = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 month_name_he = ['', 'בינואר', 'בפברואר', 'במרץ', 'באפריל', 'במאי', 'ביוני', 'ביולי', 'באוגוסט', 'בספטמבר', 'באוקטובר', 'בנובמבר', 'בדצמבר']
@@ -307,12 +307,6 @@ html_content = '''<!DOCTYPE html>
         .lang-toggle {
             position: absolute;
             top: 0;
-            left: 0;
-            display: flex;
-            gap: 5px;
-        }
-        [dir="ltr"] .lang-toggle {
-            left: auto;
             right: 0;
         }
         .lang-btn {
@@ -324,13 +318,10 @@ html_content = '''<!DOCTYPE html>
             border-radius: 5px;
             font-size: 0.9em;
             transition: all 0.3s ease;
+            min-width: 80px;
         }
         .lang-btn:hover {
             background: rgba(255,255,255,0.2);
-        }
-        .lang-btn.active {
-            background: #e74c3c;
-            border-color: #e74c3c;
         }
         .controls {
             display: flex;
@@ -350,7 +341,7 @@ html_content = '''<!DOCTYPE html>
             white-space: nowrap;
         }
         .select2-container {
-            min-width: 200px;
+            width: 200px !important;
         }
         .select2-container--default .select2-selection--single {
             background-color: rgba(255,255,255,0.1);
@@ -507,14 +498,21 @@ html_content = '''<!DOCTYPE html>
             margin-bottom: 20px;
             color: #3498db;
         }
+        /* Desktop: graphs at 80% width */
+        @media (min-width: 768px) {
+            .chart-container, .day-chart {
+                width: 80%;
+                margin-left: auto;
+                margin-right: auto;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <div class="lang-toggle">
-                <button class="lang-btn active" data-lang="he">עברית</button>
-                <button class="lang-btn" data-lang="en">English</button>
+                <button class="lang-btn" id="langToggleBtn">English</button>
             </div>
             <h1 id="mainTitle">התרעות טילים</h1>
             <p class="subtitle" id="subtitleText">מלחמה 2026</p>
@@ -564,7 +562,7 @@ html_content += '''                </select>
         <div class="stats-table-container" id="alarmStats"></div>
 
         <div class="chart-container">
-            <h2 class="chart-title" id="chartTitle">התפלגות שעתית - כל הימים (מוערם)</h2>
+            <h2 class="chart-title" id="chartTitle">התפלגות שעתית - כל הימים</h2>
             <div class="chart-wrapper">
                 <canvas id="alarmCombinedChart"></canvas>
             </div>
@@ -600,11 +598,12 @@ html_content += '''                </select>
                 labelArea: 'אזור:',
                 labelCity: 'עיר:',
                 all: 'הכל',
-                chartTitle: 'התפלגות שעתית - כל הימים (מוערם)',
+                chartTitle: 'התפלגות שעתית - כל הימים',
                 dailyBreakdown: 'פירוט יומי',
                 day: 'יום',
                 alarms: 'התרעות',
                 total: 'סה"כ',
+                change: 'שינוי',
                 footerSource: 'מקור: פיקוד העורף',
                 footerData: 'מידע מסופק על ידי',
                 fromPrevDay: 'מהיום הקודם',
@@ -641,11 +640,12 @@ html_content += '''                </select>
                 labelArea: 'Area:',
                 labelCity: 'City:',
                 all: 'All',
-                chartTitle: 'Hourly Distribution - All Days (Stacked)',
+                chartTitle: 'Hourly Distribution - All Days',
                 dailyBreakdown: 'Daily Breakdown',
                 day: 'Day',
                 alarms: 'Alarms',
                 total: 'Total',
+                change: 'Change',
                 footerSource: 'Source: Israeli Home Front Command',
                 footerData: 'Data provided by',
                 fromPrevDay: 'from previous day',
@@ -759,10 +759,9 @@ html_content += '''                </select>
             document.documentElement.lang = lang;
             document.documentElement.dir = lang === 'he' ? 'rtl' : 'ltr';
 
-            // Update language buttons
-            document.querySelectorAll('.lang-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.lang === lang);
-            });
+            // Update language toggle button to show opposite language
+            const langBtn = document.getElementById('langToggleBtn');
+            langBtn.textContent = lang === 'he' ? 'English' : 'עברית';
 
             // Update static text
             document.getElementById('pageTitle').textContent = t('pageTitle');
@@ -927,9 +926,9 @@ html_content += '''                </select>
                 width: '200px'
             });
 
-            // Language toggle
-            document.querySelectorAll('.lang-btn').forEach(btn => {
-                btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
+            // Language toggle - single button that toggles between languages
+            document.getElementById('langToggleBtn').addEventListener('click', () => {
+                setLanguage(currentLang === 'he' ? 'en' : 'he');
             });
 
             // When area changes, update city dropdown
@@ -1155,19 +1154,33 @@ html_content += '''                </select>
         function updateStats(histogram) {
             let total = 0;
             let rows = '';
+            let prevSum = null;
             days.forEach((day, i) => {
                 const sum = histogram[day].reduce((a, b) => a + b, 0);
                 total += sum;
+
+                // Calculate change from previous day
+                let changeHtml = '-';
+                if (prevSum !== null && prevSum > 0) {
+                    const pct = ((sum - prevSum) / prevSum * 100).toFixed(0);
+                    const arrow = sum > prevSum ? '↑' : (sum < prevSum ? '↓' : '');
+                    const color = sum > prevSum ? '#e74c3c' : (sum < prevSum ? '#2ed573' : '#aaa');
+                    changeHtml = `<span style="color: ${color}">${arrow} ${pct > 0 ? '+' : ''}${pct}%</span>`;
+                }
+                prevSum = sum;
+
                 rows += `
                     <tr>
                         <td><span class="color-indicator" style="background: ${colors[i % colors.length]}"></span> ${getDayName(i)}</td>
                         <td style="color: ${colors[i % colors.length]}">${sum}</td>
+                        <td>${changeHtml}</td>
                     </tr>`;
             });
             rows += `
                 <tr>
                     <td><strong>${t('total')}</strong></td>
                     <td style="color: #ffa502"><strong>${total}</strong></td>
+                    <td></td>
                 </tr>`;
 
             const html = `
@@ -1176,6 +1189,7 @@ html_content += '''                </select>
                         <tr>
                             <th>${t('day')}</th>
                             <th>${t('alarms')}</th>
+                            <th>${t('change')}</th>
                         </tr>
                     </thead>
                     <tbody>

@@ -44,12 +44,6 @@
         .lang-toggle {
             position: absolute;
             top: 0;
-            left: 0;
-            display: flex;
-            gap: 5px;
-        }
-        [dir="ltr"] .lang-toggle {
-            left: auto;
             right: 0;
         }
         .lang-btn {
@@ -61,13 +55,10 @@
             border-radius: 5px;
             font-size: 0.9em;
             transition: all 0.3s ease;
+            min-width: 80px;
         }
         .lang-btn:hover {
             background: rgba(255,255,255,0.2);
-        }
-        .lang-btn.active {
-            background: #e74c3c;
-            border-color: #e74c3c;
         }
         .controls {
             display: flex;
@@ -87,7 +78,7 @@
             white-space: nowrap;
         }
         .select2-container {
-            min-width: 200px;
+            width: 200px !important;
         }
         .select2-container--default .select2-selection--single {
             background-color: rgba(255,255,255,0.1);
@@ -244,14 +235,21 @@
             margin-bottom: 20px;
             color: #3498db;
         }
+        /* Desktop: graphs at 80% width */
+        @media (min-width: 768px) {
+            .chart-container, .day-chart {
+                width: 80%;
+                margin-left: auto;
+                margin-right: auto;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <div class="lang-toggle">
-                <button class="lang-btn active" data-lang="he">עברית</button>
-                <button class="lang-btn" data-lang="en">English</button>
+                <button class="lang-btn" id="langToggleBtn">English</button>
             </div>
             <h1 id="mainTitle">התרעות טילים</h1>
             <p class="subtitle" id="subtitleText">מלחמה 2026</p>
@@ -1718,7 +1716,7 @@
         <div class="stats-table-container" id="alarmStats"></div>
 
         <div class="chart-container">
-            <h2 class="chart-title" id="chartTitle">התפלגות שעתית - כל הימים (מוערם)</h2>
+            <h2 class="chart-title" id="chartTitle">התפלגות שעתית - כל הימים</h2>
             <div class="chart-wrapper">
                 <canvas id="alarmCombinedChart"></canvas>
             </div>
@@ -1741,7 +1739,7 @@
 
         const colors = ["#e74c3c", "#3498db", "#f39c12", "#9b59b6", "#2ecc71", "#1abc9c", "#e67e22", "#34495e"];
         const days = ["2026-02-28", "2026-03-01", "2026-03-02", "2026-03-03", "2026-03-04", "2026-03-05", "2026-03-06", "2026-03-07", "2026-03-08"];
-        const dayNames = ["Saturday (Feb 28)", "Sunday (Mar 1)", "Monday (Mar 2)", "Tuesday (Mar 3)", "Wednesday (Mar 4)", "Thursday (Mar 5)", "Friday (Mar 6)", "Saturday (Mar 7)", "Sunday (Mar 8)"];
+        const dayNames = ["Sat (Feb 28)", "Sun (Mar 1)", "Mon (Mar 2)", "Tue (Mar 3)", "Wed (Mar 4)", "Thu (Mar 5)", "Fri (Mar 6)", "Sat (Mar 7)", "Sun (Mar 8)"];
         const dayNamesHe = ["\u05e9\u05d1\u05ea (28 \u05d1\u05e4\u05d1\u05e8\u05d5\u05d0\u05e8)", "\u05e8\u05d0\u05e9\u05d5\u05df (1 \u05d1\u05de\u05e8\u05e5)", "\u05e9\u05e0\u05d9 (2 \u05d1\u05de\u05e8\u05e5)", "\u05e9\u05dc\u05d9\u05e9\u05d9 (3 \u05d1\u05de\u05e8\u05e5)", "\u05e8\u05d1\u05d9\u05e2\u05d9 (4 \u05d1\u05de\u05e8\u05e5)", "\u05d7\u05de\u05d9\u05e9\u05d9 (5 \u05d1\u05de\u05e8\u05e5)", "\u05e9\u05d9\u05e9\u05d9 (6 \u05d1\u05de\u05e8\u05e5)", "\u05e9\u05d1\u05ea (7 \u05d1\u05de\u05e8\u05e5)", "\u05e8\u05d0\u05e9\u05d5\u05df (8 \u05d1\u05de\u05e8\u05e5)"];
 
         // Translations
@@ -1754,11 +1752,12 @@
                 labelArea: 'אזור:',
                 labelCity: 'עיר:',
                 all: 'הכל',
-                chartTitle: 'התפלגות שעתית - כל הימים (מוערם)',
+                chartTitle: 'התפלגות שעתית - כל הימים',
                 dailyBreakdown: 'פירוט יומי',
                 day: 'יום',
                 alarms: 'התרעות',
                 total: 'סה"כ',
+                change: 'שינוי',
                 footerSource: 'מקור: פיקוד העורף',
                 footerData: 'מידע מסופק על ידי',
                 fromPrevDay: 'מהיום הקודם',
@@ -1795,11 +1794,12 @@
                 labelArea: 'Area:',
                 labelCity: 'City:',
                 all: 'All',
-                chartTitle: 'Hourly Distribution - All Days (Stacked)',
+                chartTitle: 'Hourly Distribution - All Days',
                 dailyBreakdown: 'Daily Breakdown',
                 day: 'Day',
                 alarms: 'Alarms',
                 total: 'Total',
+                change: 'Change',
                 footerSource: 'Source: Israeli Home Front Command',
                 footerData: 'Data provided by',
                 fromPrevDay: 'from previous day',
@@ -1913,10 +1913,9 @@
             document.documentElement.lang = lang;
             document.documentElement.dir = lang === 'he' ? 'rtl' : 'ltr';
 
-            // Update language buttons
-            document.querySelectorAll('.lang-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.lang === lang);
-            });
+            // Update language toggle button to show opposite language
+            const langBtn = document.getElementById('langToggleBtn');
+            langBtn.textContent = lang === 'he' ? 'English' : 'עברית';
 
             // Update static text
             document.getElementById('pageTitle').textContent = t('pageTitle');
@@ -2081,9 +2080,9 @@
                 width: '200px'
             });
 
-            // Language toggle
-            document.querySelectorAll('.lang-btn').forEach(btn => {
-                btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
+            // Language toggle - single button that toggles between languages
+            document.getElementById('langToggleBtn').addEventListener('click', () => {
+                setLanguage(currentLang === 'he' ? 'en' : 'he');
             });
 
             // When area changes, update city dropdown
@@ -2309,19 +2308,33 @@
         function updateStats(histogram) {
             let total = 0;
             let rows = '';
+            let prevSum = null;
             days.forEach((day, i) => {
                 const sum = histogram[day].reduce((a, b) => a + b, 0);
                 total += sum;
+
+                // Calculate change from previous day
+                let changeHtml = '-';
+                if (prevSum !== null && prevSum > 0) {
+                    const pct = ((sum - prevSum) / prevSum * 100).toFixed(0);
+                    const arrow = sum > prevSum ? '↑' : (sum < prevSum ? '↓' : '');
+                    const color = sum > prevSum ? '#e74c3c' : (sum < prevSum ? '#2ed573' : '#aaa');
+                    changeHtml = `<span style="color: ${color}">${arrow} ${pct > 0 ? '+' : ''}${pct}%</span>`;
+                }
+                prevSum = sum;
+
                 rows += `
                     <tr>
                         <td><span class="color-indicator" style="background: ${colors[i % colors.length]}"></span> ${getDayName(i)}</td>
                         <td style="color: ${colors[i % colors.length]}">${sum}</td>
+                        <td>${changeHtml}</td>
                     </tr>`;
             });
             rows += `
                 <tr>
                     <td><strong>${t('total')}</strong></td>
                     <td style="color: #ffa502"><strong>${total}</strong></td>
+                    <td></td>
                 </tr>`;
 
             const html = `
@@ -2330,6 +2343,7 @@
                         <tr>
                             <th>${t('day')}</th>
                             <th>${t('alarms')}</th>
+                            <th>${t('change')}</th>
                         </tr>
                     </thead>
                     <tbody>
