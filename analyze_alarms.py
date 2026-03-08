@@ -266,7 +266,7 @@ html_content = '''<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title id="pageTitle">ניתוח התרעות טילים - מלחמה 2026</title>
+    <title id="pageTitle">ניתוח התרעות טילים - מבצע שאגת האריה</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
@@ -515,7 +515,7 @@ html_content = '''<!DOCTYPE html>
                 <button class="lang-btn" id="langToggleBtn">English</button>
             </div>
             <h1 id="mainTitle">התרעות טילים</h1>
-            <p class="subtitle" id="subtitleText">מלחמה 2026</p>
+            <p class="subtitle" id="subtitleText">מבצע שאגת האריה</p>
         </div>
 
         <div class="controls">
@@ -591,9 +591,9 @@ html_content += '''                </select>
         // Translations
         const translations = {
             he: {
-                pageTitle: 'ניתוח התרעות טילים - מלחמה 2026',
+                pageTitle: 'ניתוח התרעות טילים - מבצע שאגת האריה',
                 mainTitle: 'התרעות טילים',
-                subtitle: 'מלחמה 2026',
+                subtitle: 'מבצע שאגת האריה',
                 labelOrigin: 'מקור:',
                 labelArea: 'אזור:',
                 labelCity: 'עיר:',
@@ -633,9 +633,9 @@ html_content += '''                </select>
                 }
             },
             en: {
-                pageTitle: 'Missile Alarms Analysis - War 2026',
+                pageTitle: 'Missile Alarms Analysis - Operation Lion\'s Roar',
                 mainTitle: 'Missile Alarms',
-                subtitle: 'War 2026',
+                subtitle: 'Operation Lion\'s Roar',
                 labelOrigin: 'Origin:',
                 labelArea: 'Area:',
                 labelCity: 'City:',
