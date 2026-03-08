@@ -1958,8 +1958,11 @@
                 }
             });
 
-            // Refresh Select2 to show updated text
-            $('#originSelect, #areaSelect, #citySelect').trigger('change.select2');
+            // Destroy and reinitialize Select2 to pick up new option texts
+            $('#originSelect, #areaSelect, #citySelect').select2('destroy').select2({
+                allowClear: false,
+                width: '200px'
+            });
 
             // Refresh charts and legends
             updateFromFilters();
