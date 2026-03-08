@@ -780,6 +780,14 @@ html_content += '''                </select>
                 opt.textContent = t('all');
             });
 
+            // Update origin dropdown options
+            $('#originSelect option').each(function() {
+                const val = $(this).val();
+                if (val !== '__all__') {
+                    $(this).text(getOriginName(val));
+                }
+            });
+
             // Update area dropdown options
             $('#areaSelect option').each(function() {
                 const val = $(this).val();
@@ -795,6 +803,9 @@ html_content += '''                </select>
                     $(this).text(getCityName(val));
                 }
             });
+
+            // Refresh Select2 to show updated text
+            $('#originSelect, #areaSelect, #citySelect').trigger('change.select2');
 
             // Refresh charts and legends
             updateFromFilters();
