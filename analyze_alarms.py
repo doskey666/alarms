@@ -498,9 +498,9 @@ html_content = '''<!DOCTYPE html>
             margin-bottom: 20px;
             color: #3498db;
         }
-        /* Desktop: graphs at 80% width */
+        /* Desktop: table and graphs at 80% width */
         @media (min-width: 768px) {
-            .chart-container, .day-chart {
+            .stats-table-container, .chart-container, .day-chart {
                 width: 80%;
                 margin-left: auto;
                 margin-right: auto;
