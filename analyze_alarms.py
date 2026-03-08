@@ -633,9 +633,9 @@ html_content += '''                </select>
                 }
             },
             en: {
-                pageTitle: 'Missile Alarms Analysis - Operation Lion\'s Roar',
+                pageTitle: "Missile Alarms Analysis - Operation Lion's Roar",
                 mainTitle: 'Missile Alarms',
-                subtitle: 'Operation Lion\'s Roar',
+                subtitle: "Operation Lion's Roar",
                 labelOrigin: 'Origin:',
                 labelArea: 'Area:',
                 labelCity: 'City:',
