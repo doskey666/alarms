@@ -574,7 +574,6 @@ html_content += '''                </select>
             <div class="chart-wrapper">
                 <canvas id="alarmLast3Chart"></canvas>
             </div>
-            <div class="legend" id="alarmLast3Legend"></div>
         </div>
 
         <h2 class="section-title" id="dailyBreakdownTitle">פירוט יומי</h2>
@@ -827,9 +826,9 @@ html_content += '''                </select>
         }
 
         function updateLegends() {
-            // Update combined chart legend (by day)
-            const legendHtml = days.map((day, i) =>
-                `<div class="legend-item"><div class="legend-color" style="background:${colors[i % colors.length]}"></div>${getDayName(i)}</div>`
+            // Update combined chart legend (by day groups)
+            const legendHtml = dayGroups.map((group, g) =>
+                `<div class="legend-item"><div class="legend-color" style="background:${groupColors[g % groupColors.length]}"></div>${getDayGroupLabel(group)}</div>`
             ).join('');
             document.getElementById('alarmLegend').innerHTML = legendHtml;
 
@@ -839,18 +838,8 @@ html_content += '''                </select>
                 if (titleEl) titleEl.textContent = getDayName(i);
             });
 
-            // Update last 3 days legend
-            updateLast3Legend();
-
             // Update origin legend
             updateOriginLegend();
-        }
-
-        function updateLast3Legend() {
-            const legendHtml = last3DayIndices.map(i =>
-                `<div class="legend-item"><div class="legend-color" style="background:${colors[i % colors.length]}"></div>${getDayName(i)}</div>`
-            ).join('');
-            document.getElementById('alarmLast3Legend').innerHTML = legendHtml;
         }
 
         function updateOriginLegend() {
@@ -873,6 +862,23 @@ html_content += '''                </select>
         let alarmDayCharts = [];
         const last3Days = days.slice(-3);
         const last3DayIndices = days.map((d, i) => i).slice(-3);
+
+        // Build day groups (chunks of 3) for the all-days combined chart
+        const dayGroups = [];
+        for (let i = 0; i < days.length; i += 3) {
+            dayGroups.push(days.slice(i, Math.min(i + 3, days.length)));
+        }
+        const groupColors = ['#e74c3c', '#3498db', '#f39c12', '#9b59b6', '#2ecc71'];
+
+        function getDayGroupLabel(group) {
+            if (group.length === 1) {
+                const idx = days.indexOf(group[0]);
+                return getDayName(idx);
+            }
+            const firstIdx = days.indexOf(group[0]);
+            const lastIdx = days.indexOf(group[group.length - 1]);
+            return getDayName(firstIdx) + ' — ' + getDayName(lastIdx);
+        }
 
         // Compute histogram based on current filters
         // Returns: { combined: {day: [24 hourly counts]}, byOrigin: {day: {originIdx: [24 hourly counts]}} }
@@ -1061,14 +1067,11 @@ html_content += '''                </select>
             // Update origin legend
             updateOriginLegend();
 
-            // Initialize combined chart (all days)
-            alarmCombinedChart = createCombinedChart('alarmCombinedChart', days, days.map((d, i) => i));
+            // Initialize combined chart (all days, grouped by 3)
+            alarmCombinedChart = createGroupedChart('alarmCombinedChart');
 
-            // Initialize last 3 days chart
-            alarmLast3Chart = createCombinedChart('alarmLast3Chart', last3Days, last3DayIndices);
-
-            // Update last 3 days legend
-            updateLast3Legend();
+            // Initialize last 3 days chart (single color, not stacked)
+            alarmLast3Chart = createLast3Chart('alarmLast3Chart');
 
             // Initialize day charts (stacked by origin)
             days.forEach((day, i) => {
@@ -1076,22 +1079,19 @@ html_content += '''                </select>
             });
         }
 
-        function createCombinedChart(canvasId, chartDays, chartDayIndices) {
+        function createGroupedChart(canvasId) {
             const ctx = document.getElementById(canvasId).getContext('2d');
             return new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: hours,
-                    datasets: chartDays.map((day, j) => {
-                        const i = chartDayIndices[j];
-                        return {
-                            label: dayNames[i],
-                            data: new Array(24).fill(0),
-                            backgroundColor: colors[i % colors.length],
-                            borderColor: colors[i % colors.length],
-                            borderWidth: 1
-                        };
-                    })
+                    datasets: dayGroups.map((group, g) => ({
+                        label: getDayGroupLabel(group),
+                        data: new Array(24).fill(0),
+                        backgroundColor: groupColors[g % groupColors.length],
+                        borderColor: groupColors[g % groupColors.length],
+                        borderWidth: 1
+                    }))
                 },
                 options: {
                     responsive: true,
@@ -1105,6 +1105,39 @@ html_content += '''                </select>
                         },
                         y: {
                             stacked: true,
+                            beginAtZero: true,
+                            ticks: { color: '#aaa' },
+                            grid: { color: 'rgba(255,255,255,0.1)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createLast3Chart(canvasId) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            return new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: hours,
+                    datasets: [{
+                        label: t('alarms'),
+                        data: new Array(24).fill(0),
+                        backgroundColor: '#e67e22',
+                        borderColor: '#d35400',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: {
+                            ticks: { color: '#aaa' },
+                            grid: { color: 'rgba(255,255,255,0.1)' }
+                        },
+                        y: {
                             beginAtZero: true,
                             ticks: { color: '#aaa' },
                             grid: { color: 'rgba(255,255,255,0.1)' }
@@ -1171,18 +1204,24 @@ html_content += '''                </select>
             const displayName = displayParts.length > 0 ? displayParts.join(' | ') : t('all');
             document.getElementById('currentFilterDisplay').textContent = displayName;
 
-            // Update combined chart (stacked by day) - update labels and data
-            days.forEach((day, i) => {
-                alarmCombinedChart.data.datasets[i].label = getDayName(i);
-                alarmCombinedChart.data.datasets[i].data = combined[day];
+            // Update combined chart (stacked by day groups)
+            dayGroups.forEach((group, g) => {
+                const merged = new Array(24).fill(0);
+                group.forEach(day => {
+                    combined[day].forEach((v, h) => merged[h] += v);
+                });
+                alarmCombinedChart.data.datasets[g].label = getDayGroupLabel(group);
+                alarmCombinedChart.data.datasets[g].data = merged;
             });
             alarmCombinedChart.update();
 
-            // Update last 3 days chart - update labels and data
-            last3Days.forEach((day, j) => {
-                alarmLast3Chart.data.datasets[j].label = getDayName(last3DayIndices[j]);
-                alarmLast3Chart.data.datasets[j].data = combined[day];
+            // Update last 3 days chart (single merged series)
+            const last3Merged = new Array(24).fill(0);
+            last3Days.forEach(day => {
+                combined[day].forEach((v, h) => last3Merged[h] += v);
             });
+            alarmLast3Chart.data.datasets[0].label = t('alarms');
+            alarmLast3Chart.data.datasets[0].data = last3Merged;
             alarmLast3Chart.update();
 
             // Update day charts (stacked by origin) - update labels and data
