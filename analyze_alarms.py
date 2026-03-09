@@ -1171,28 +1171,31 @@ html_content += '''                </select>
             const displayName = displayParts.length > 0 ? displayParts.join(' | ') : t('all');
             document.getElementById('currentFilterDisplay').textContent = displayName;
 
-            // Update combined chart (stacked by day)
+            // Update combined chart (stacked by day) - update labels and data
             days.forEach((day, i) => {
+                alarmCombinedChart.data.datasets[i].label = getDayName(i);
                 alarmCombinedChart.data.datasets[i].data = combined[day];
             });
             alarmCombinedChart.update();
 
-            // Update last 3 days chart
+            // Update last 3 days chart - update labels and data
             last3Days.forEach((day, j) => {
+                alarmLast3Chart.data.datasets[j].label = getDayName(last3DayIndices[j]);
                 alarmLast3Chart.data.datasets[j].data = combined[day];
             });
             alarmLast3Chart.update();
 
-            // Update day charts (stacked by origin)
-            // Dataset order: known origins first (excluding ''), then unknown ('')
+            // Update day charts (stacked by origin) - update labels and data
             const knownOrigins = originList.filter(o => o !== '');
             days.forEach((day, i) => {
                 knownOrigins.forEach((origin, j) => {
                     const originIdx = originList.indexOf(origin);
+                    alarmDayCharts[i].data.datasets[j].label = getOriginName(origin);
                     alarmDayCharts[i].data.datasets[j].data = byOrigin[day][originIdx];
                 });
                 // Unknown origin is last dataset
                 const unknownIdx = originList.indexOf('');
+                alarmDayCharts[i].data.datasets[knownOrigins.length].label = getOriginName('');
                 alarmDayCharts[i].data.datasets[knownOrigins.length].data = byOrigin[day][unknownIdx];
                 alarmDayCharts[i].update();
             });
