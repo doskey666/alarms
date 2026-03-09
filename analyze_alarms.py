@@ -569,6 +569,14 @@ html_content += '''                </select>
             <div class="legend" id="alarmLegend"></div>
         </div>
 
+        <div class="chart-container">
+            <h2 class="chart-title" id="chartTitleLast3">התפלגות שעתית - 3 ימים אחרונים</h2>
+            <div class="chart-wrapper">
+                <canvas id="alarmLast3Chart"></canvas>
+            </div>
+            <div class="legend" id="alarmLast3Legend"></div>
+        </div>
+
         <h2 class="section-title" id="dailyBreakdownTitle">פירוט יומי</h2>
         <div id="alarmDayCharts"></div>
     </div>
@@ -599,6 +607,7 @@ html_content += '''                </select>
                 labelCity: 'עיר:',
                 all: 'הכל',
                 chartTitle: 'התפלגות שעתית - כל הימים',
+                chartTitleLast3: 'התפלגות שעתית - 3 ימים אחרונים',
                 dailyBreakdown: 'פירוט יומי',
                 day: 'יום',
                 alarms: 'התרעות',
@@ -641,6 +650,7 @@ html_content += '''                </select>
                 labelCity: 'City:',
                 all: 'All',
                 chartTitle: 'Hourly Distribution - All Days',
+                chartTitleLast3: 'Hourly Distribution - Last 3 Days',
                 dailyBreakdown: 'Daily Breakdown',
                 day: 'Day',
                 alarms: 'Alarms',
@@ -771,6 +781,7 @@ html_content += '''                </select>
             document.getElementById('labelArea').textContent = t('labelArea');
             document.getElementById('labelCity').textContent = t('labelCity');
             document.getElementById('chartTitle').textContent = t('chartTitle');
+            document.getElementById('chartTitleLast3').textContent = t('chartTitleLast3');
             document.getElementById('dailyBreakdownTitle').textContent = t('dailyBreakdown');
             document.getElementById('footerSource').textContent = t('footerSource');
             document.getElementById('footerData').innerHTML = t('footerData') + ' <a href="https://github.com/yuval-harpaz/alarms" target="_blank">yuval-harpaz/alarms</a>';
@@ -828,8 +839,18 @@ html_content += '''                </select>
                 if (titleEl) titleEl.textContent = getDayName(i);
             });
 
+            // Update last 3 days legend
+            updateLast3Legend();
+
             // Update origin legend
             updateOriginLegend();
+        }
+
+        function updateLast3Legend() {
+            const legendHtml = last3DayIndices.map(i =>
+                `<div class="legend-item"><div class="legend-color" style="background:${colors[i % colors.length]}"></div>${getDayName(i)}</div>`
+            ).join('');
+            document.getElementById('alarmLast3Legend').innerHTML = legendHtml;
         }
 
         function updateOriginLegend() {
@@ -848,7 +869,10 @@ html_content += '''                </select>
         const alarmData = ''' + json.dumps(compact_alarms, ensure_ascii=False) + ''';
 
         let alarmCombinedChart = null;
+        let alarmLast3Chart = null;
         let alarmDayCharts = [];
+        const last3Days = days.slice(-3);
+        const last3DayIndices = days.map((d, i) => i).slice(-3);
 
         // Compute histogram based on current filters
         // Returns: { combined: {day: [24 hourly counts]}, byOrigin: {day: {originIdx: [24 hourly counts]}} }
@@ -1037,8 +1061,14 @@ html_content += '''                </select>
             // Update origin legend
             updateOriginLegend();
 
-            // Initialize combined chart
-            alarmCombinedChart = createCombinedChart('alarmCombinedChart');
+            // Initialize combined chart (all days)
+            alarmCombinedChart = createCombinedChart('alarmCombinedChart', days, days.map((d, i) => i));
+
+            // Initialize last 3 days chart
+            alarmLast3Chart = createCombinedChart('alarmLast3Chart', last3Days, last3DayIndices);
+
+            // Update last 3 days legend
+            updateLast3Legend();
 
             // Initialize day charts (stacked by origin)
             days.forEach((day, i) => {
@@ -1046,19 +1076,22 @@ html_content += '''                </select>
             });
         }
 
-        function createCombinedChart(canvasId) {
+        function createCombinedChart(canvasId, chartDays, chartDayIndices) {
             const ctx = document.getElementById(canvasId).getContext('2d');
             return new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: hours,
-                    datasets: days.map((day, i) => ({
-                        label: dayNames[i],
-                        data: new Array(24).fill(0),
-                        backgroundColor: colors[i % colors.length],
-                        borderColor: colors[i % colors.length],
-                        borderWidth: 1
-                    }))
+                    datasets: chartDays.map((day, j) => {
+                        const i = chartDayIndices[j];
+                        return {
+                            label: dayNames[i],
+                            data: new Array(24).fill(0),
+                            backgroundColor: colors[i % colors.length],
+                            borderColor: colors[i % colors.length],
+                            borderWidth: 1
+                        };
+                    })
                 },
                 options: {
                     responsive: true,
@@ -1143,6 +1176,12 @@ html_content += '''                </select>
                 alarmCombinedChart.data.datasets[i].data = combined[day];
             });
             alarmCombinedChart.update();
+
+            // Update last 3 days chart
+            last3Days.forEach((day, j) => {
+                alarmLast3Chart.data.datasets[j].data = combined[day];
+            });
+            alarmLast3Chart.update();
 
             // Update day charts (stacked by origin)
             // Dataset order: known origins first (excluding ''), then unknown ('')
