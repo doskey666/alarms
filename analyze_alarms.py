@@ -430,35 +430,6 @@ html_content = '''<!DOCTYPE html>
         .chart-wrapper {
             height: 250px;
         }
-        .day-chart-wrapper {
-            height: 180px;
-        }
-        .day-chart {
-            background: rgba(255,255,255,0.03);
-            border-radius: 15px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        .day-chart h3 {
-            text-align: center;
-            margin-bottom: 15px;
-            color: #f39c12;
-        }
-        .change-indicator {
-            text-align: center;
-            padding: 10px;
-            margin-top: 10px;
-            border-radius: 8px;
-            font-size: 0.9em;
-        }
-        .change-up {
-            background: rgba(231, 76, 60, 0.2);
-            color: #e74c3c;
-        }
-        .change-down {
-            background: rgba(46, 213, 115, 0.2);
-            color: #2ed573;
-        }
         .legend {
             display: flex;
             justify-content: center;
@@ -500,7 +471,7 @@ html_content = '''<!DOCTYPE html>
         }
         /* Desktop: table and graphs at 80% width */
         @media (min-width: 768px) {
-            .stats-table-container, .chart-container, .day-chart {
+            .stats-table-container, .chart-container {
                 width: 80%;
                 margin-left: auto;
                 margin-right: auto;
@@ -574,10 +545,9 @@ html_content += '''                </select>
             <div class="chart-wrapper">
                 <canvas id="alarmLast3Chart"></canvas>
             </div>
+            <div class="legend" id="alarmLast3Legend"></div>
         </div>
 
-        <h2 class="section-title" id="dailyBreakdownTitle">פירוט יומי</h2>
-        <div id="alarmDayCharts"></div>
     </div>
 
     <footer>
@@ -607,14 +577,12 @@ html_content += '''                </select>
                 all: 'הכל',
                 chartTitle: 'התפלגות שעתית - כל הימים',
                 chartTitleLast3: 'התפלגות שעתית - 3 ימים אחרונים',
-                dailyBreakdown: 'פירוט יומי',
                 day: 'יום',
                 alarms: 'התרעות',
                 total: 'סה"כ',
                 change: 'שינוי',
                 footerSource: 'מקור: פיקוד העורף',
                 footerData: 'מידע מסופק על ידי',
-                fromPrevDay: 'מהיום הקודם',
                 origins: {
                     '': 'לא ידוע',
                     'Iran': 'איראן',
@@ -650,14 +618,12 @@ html_content += '''                </select>
                 all: 'All',
                 chartTitle: 'Hourly Distribution - All Days',
                 chartTitleLast3: 'Hourly Distribution - Last 3 Days',
-                dailyBreakdown: 'Daily Breakdown',
                 day: 'Day',
                 alarms: 'Alarms',
                 total: 'Total',
                 change: 'Change',
                 footerSource: 'Source: Israeli Home Front Command',
                 footerData: 'Data provided by',
-                fromPrevDay: 'from previous day',
                 origins: {
                     '': 'Unknown',
                     'Iran': 'Iran',
@@ -781,7 +747,6 @@ html_content += '''                </select>
             document.getElementById('labelCity').textContent = t('labelCity');
             document.getElementById('chartTitle').textContent = t('chartTitle');
             document.getElementById('chartTitleLast3').textContent = t('chartTitleLast3');
-            document.getElementById('dailyBreakdownTitle').textContent = t('dailyBreakdown');
             document.getElementById('footerSource').textContent = t('footerSource');
             document.getElementById('footerData').innerHTML = t('footerData') + ' <a href="https://github.com/yuval-harpaz/alarms" target="_blank">yuval-harpaz/alarms</a>';
 
@@ -832,23 +797,16 @@ html_content += '''                </select>
             ).join('');
             document.getElementById('alarmLegend').innerHTML = legendHtml;
 
-            // Update day titles
-            days.forEach((day, i) => {
-                const titleEl = document.getElementById('dayTitle' + i);
-                if (titleEl) titleEl.textContent = getDayName(i);
-            });
-
-            // Update origin legend
-            updateOriginLegend();
+            // Update last 3 days origin legend
+            updateLast3OriginLegend();
         }
 
-        function updateOriginLegend() {
+        function updateLast3OriginLegend() {
             const knownOrigins = originList.filter(o => o !== '');
             const originLegendHtml = [...knownOrigins, ''].map(origin =>
                 `<div class="legend-item"><div class="legend-color" style="background:${originColors[origin]}"></div>${getOriginName(origin)}</div>`
             ).join('');
-            const legendEl = document.getElementById('originLegend');
-            if (legendEl) legendEl.innerHTML = originLegendHtml;
+            document.getElementById('alarmLast3Legend').innerHTML = originLegendHtml;
         }
 
         // Area to city indices mapping
@@ -859,7 +817,6 @@ html_content += '''                </select>
 
         let alarmCombinedChart = null;
         let alarmLast3Chart = null;
-        let alarmDayCharts = [];
         const last3Days = days.slice(-3);
         const last3DayIndices = days.map((d, i) => i).slice(-3);
 
@@ -868,7 +825,7 @@ html_content += '''                </select>
         for (let i = 0; i < days.length; i += 3) {
             dayGroups.push(days.slice(i, Math.min(i + 3, days.length)));
         }
-        const groupColors = ['#e74c3c', '#3498db', '#f39c12', '#9b59b6', '#2ecc71'];
+        const groupColors = ['#e74c3c', '#3498db', '#f39c12', '#2ecc71', '#9b59b6', '#1abc9c', '#e67e22'];
 
         function getDayGroupLabel(group) {
             if (group.length === 1) {
@@ -1047,36 +1004,13 @@ html_content += '''                </select>
         }
 
         function initCharts() {
-            // Create legend for combined chart (by day)
             updateLegends();
-
-            // Create day chart containers (legend will be added dynamically)
-            let alarmDayHtml = `<div id="originLegend" class="origin-legend" style="display:flex;justify-content:center;gap:20px;margin-bottom:20px;flex-wrap:wrap;"></div>`;
-            days.forEach((day, i) => {
-                alarmDayHtml += `
-                    <div class="day-chart">
-                        <h3 id="dayTitle${i}">${getDayName(i)}</h3>
-                        <div class="day-chart-wrapper">
-                            <canvas id="alarmChart${i}"></canvas>
-                        </div>
-                        <div class="change-indicator" id="alarmChange${i}"></div>
-                    </div>`;
-            });
-            document.getElementById('alarmDayCharts').innerHTML = alarmDayHtml;
-
-            // Update origin legend
-            updateOriginLegend();
 
             // Initialize combined chart (all days, grouped by 3)
             alarmCombinedChart = createGroupedChart('alarmCombinedChart');
 
-            // Initialize last 3 days chart (single color, not stacked)
-            alarmLast3Chart = createLast3Chart('alarmLast3Chart');
-
-            // Initialize day charts (stacked by origin)
-            days.forEach((day, i) => {
-                alarmDayCharts.push(createDayChart('alarmChart' + i));
-            });
+            // Initialize last 3 days chart (stacked by origin)
+            alarmLast3Chart = createOriginStackedChart('alarmLast3Chart');
         }
 
         function createGroupedChart(canvasId) {
@@ -1114,50 +1048,16 @@ html_content += '''                </select>
             });
         }
 
-        function createLast3Chart(canvasId) {
+        function createOriginStackedChart(canvasId) {
             const ctx = document.getElementById(canvasId).getContext('2d');
-            return new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: hours,
-                    datasets: [{
-                        label: t('alarms'),
-                        data: new Array(24).fill(0),
-                        backgroundColor: '#e67e22',
-                        borderColor: '#d35400',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: {
-                            ticks: { color: '#aaa' },
-                            grid: { color: 'rgba(255,255,255,0.1)' }
-                        },
-                        y: {
-                            beginAtZero: true,
-                            ticks: { color: '#aaa' },
-                            grid: { color: 'rgba(255,255,255,0.1)' }
-                        }
-                    }
-                }
-            });
-        }
-
-        function createDayChart(canvasId) {
-            const ctx = document.getElementById(canvasId).getContext('2d');
-            // Create datasets for each origin (excluding empty/unknown for cleaner display)
-            const datasets = originList.filter(o => o !== '').map((origin, i) => ({
+            const knownOrigins = originList.filter(o => o !== '');
+            const datasets = knownOrigins.map(origin => ({
                 label: getOriginName(origin),
                 data: new Array(24).fill(0),
                 backgroundColor: originColors[origin],
                 borderColor: originColors[origin],
                 borderWidth: 1
             }));
-            // Add unknown origin dataset at the end
             datasets.push({
                 label: getOriginName(''),
                 data: new Array(24).fill(0),
@@ -1179,7 +1079,7 @@ html_content += '''                </select>
                     scales: {
                         x: {
                             stacked: true,
-                            ticks: { color: '#aaa', maxRotation: 45, minRotation: 45 },
+                            ticks: { color: '#aaa' },
                             grid: { color: 'rgba(255,255,255,0.1)' }
                         },
                         y: {
@@ -1215,35 +1115,29 @@ html_content += '''                </select>
             });
             alarmCombinedChart.update();
 
-            // Update last 3 days chart (single merged series)
-            const last3Merged = new Array(24).fill(0);
-            last3Days.forEach(day => {
-                combined[day].forEach((v, h) => last3Merged[h] += v);
-            });
-            alarmLast3Chart.data.datasets[0].label = t('alarms');
-            alarmLast3Chart.data.datasets[0].data = last3Merged;
-            alarmLast3Chart.update();
-
-            // Update day charts (stacked by origin) - update labels and data
+            // Update last 3 days chart (stacked by origin)
             const knownOrigins = originList.filter(o => o !== '');
-            days.forEach((day, i) => {
-                knownOrigins.forEach((origin, j) => {
-                    const originIdx = originList.indexOf(origin);
-                    alarmDayCharts[i].data.datasets[j].label = getOriginName(origin);
-                    alarmDayCharts[i].data.datasets[j].data = byOrigin[day][originIdx];
-                });
-                // Unknown origin is last dataset
-                const unknownIdx = originList.indexOf('');
-                alarmDayCharts[i].data.datasets[knownOrigins.length].label = getOriginName('');
-                alarmDayCharts[i].data.datasets[knownOrigins.length].data = byOrigin[day][unknownIdx];
-                alarmDayCharts[i].update();
+            const last3ByOrigin = {};
+            originList.forEach((_, idx) => {
+                last3ByOrigin[idx] = new Array(24).fill(0);
             });
+            last3Days.forEach(day => {
+                originList.forEach((_, idx) => {
+                    byOrigin[day][idx].forEach((v, h) => last3ByOrigin[idx][h] += v);
+                });
+            });
+            knownOrigins.forEach((origin, j) => {
+                const originIdx = originList.indexOf(origin);
+                alarmLast3Chart.data.datasets[j].label = getOriginName(origin);
+                alarmLast3Chart.data.datasets[j].data = last3ByOrigin[originIdx];
+            });
+            const unknownIdx = originList.indexOf('');
+            alarmLast3Chart.data.datasets[knownOrigins.length].label = getOriginName('');
+            alarmLast3Chart.data.datasets[knownOrigins.length].data = last3ByOrigin[unknownIdx];
+            alarmLast3Chart.update();
 
             // Update stats
             updateStats(combined);
-
-            // Update change indicators
-            updateChangeIndicators(combined);
         }
 
         function updateStats(histogram) {
@@ -1294,28 +1188,6 @@ html_content += '''                </select>
             document.getElementById('alarmStats').innerHTML = html;
         }
 
-        function updateChangeIndicators(histogram) {
-            days.forEach((day, i) => {
-                const elem = document.getElementById('alarmChange' + i);
-                if (i === 0) {
-                    elem.style.display = 'none';
-                    return;
-                }
-                const prev = histogram[days[i-1]].reduce((a, b) => a + b, 0);
-                const curr = histogram[day].reduce((a, b) => a + b, 0);
-                if (prev === 0) {
-                    elem.style.display = 'none';
-                    return;
-                }
-                const change = curr - prev;
-                const pct = (change / prev * 100).toFixed(1);
-                const arrow = change > 0 ? '↑' : '↓';
-                const cls = change > 0 ? 'change-up' : 'change-down';
-                elem.className = 'change-indicator ' + cls;
-                elem.style.display = 'block';
-                elem.innerHTML = `${arrow} ${Math.abs(change)} ${t('alarms')} (${pct > 0 ? '+' : ''}${pct}%) ${t('fromPrevDay')}`;
-            });
-        }
     </script>
 </body>
 </html>
