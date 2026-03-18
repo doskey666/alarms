@@ -443,6 +443,13 @@ html_content = '''<!DOCTYPE html>
             gap: 8px;
             font-size: 0.9em;
         }
+        .legend-item.clickable {
+            cursor: pointer;
+            user-select: none;
+        }
+        .legend-item.clickable.inactive {
+            opacity: 0.3;
+        }
         .legend-color {
             width: 18px;
             height: 18px;
@@ -540,22 +547,6 @@ html_content += '''                </select>
             <div class="legend" id="alarmLegend"></div>
         </div>
 
-        <div class="chart-container">
-            <h2 class="chart-title" id="chartTitleLast3">התפלגות שעתית - 3 ימים אחרונים</h2>
-            <div class="chart-wrapper">
-                <canvas id="alarmLast3Chart"></canvas>
-            </div>
-            <div class="legend" id="alarmLast3Legend"></div>
-        </div>
-
-        <div class="chart-container">
-            <h2 class="chart-title" id="chartTitleLast7">התפלגות שעתית - 7 ימים אחרונים</h2>
-            <div class="chart-wrapper">
-                <canvas id="alarmLast7Chart"></canvas>
-            </div>
-            <div class="legend" id="alarmLast7Legend"></div>
-        </div>
-
     </div>
 
     <footer>
@@ -584,8 +575,6 @@ html_content += '''                </select>
                 labelCity: 'עיר:',
                 all: 'הכל',
                 chartTitle: 'התפלגות שעתית - כל הימים',
-                chartTitleLast7: 'התפלגות שעתית - 7 ימים אחרונים',
-                chartTitleLast3: 'התפלגות שעתית - 3 ימים אחרונים',
                 day: 'יום',
                 alarms: 'התרעות',
                 total: 'סה"כ',
@@ -626,8 +615,6 @@ html_content += '''                </select>
                 labelCity: 'City:',
                 all: 'All',
                 chartTitle: 'Hourly Distribution - All Days',
-                chartTitleLast7: 'Hourly Distribution - Last 7 Days',
-                chartTitleLast3: 'Hourly Distribution - Last 3 Days',
                 day: 'Day',
                 alarms: 'Alarms',
                 total: 'Total',
@@ -756,8 +743,6 @@ html_content += '''                </select>
             document.getElementById('labelArea').textContent = t('labelArea');
             document.getElementById('labelCity').textContent = t('labelCity');
             document.getElementById('chartTitle').textContent = t('chartTitle');
-            document.getElementById('chartTitleLast7').textContent = t('chartTitleLast7');
-            document.getElementById('chartTitleLast3').textContent = t('chartTitleLast3');
             document.getElementById('footerSource').textContent = t('footerSource');
             document.getElementById('footerData').innerHTML = t('footerData') + ' <a href="https://github.com/yuval-harpaz/alarms" target="_blank">yuval-harpaz/alarms</a>';
 
@@ -802,19 +787,55 @@ html_content += '''                </select>
         }
 
         function updateLegends() {
-            // Update combined chart legend (by day groups)
+            // Update combined chart legend (by day groups) - clickable
             const legendHtml = dayGroups.map((group, g) =>
-                `<div class="legend-item"><div class="legend-color" style="background:${groupColors[g % groupColors.length]}"></div>${getDayGroupLabel(group)}</div>`
+                `<div class="legend-item clickable${activeGroups.has(g) ? '' : ' inactive'}" data-group="${g}"><div class="legend-color" style="background:${groupColors[g % groupColors.length]}"></div>${getDayGroupLabel(group)}</div>`
             ).join('');
-            document.getElementById('alarmLegend').innerHTML = legendHtml;
+            const legendEl = document.getElementById('alarmLegend');
+            legendEl.innerHTML = legendHtml;
 
-            // Update origin legends for last7, last3, and daily charts
-            const knownOrigins = originList.filter(o => o !== '');
-            const originLegendHtml = [...knownOrigins, ''].map(origin =>
-                `<div class="legend-item"><div class="legend-color" style="background:${originColors[origin]}"></div>${getOriginName(origin)}</div>`
-            ).join('');
-            document.getElementById('alarmLast7Legend').innerHTML = originLegendHtml;
-            document.getElementById('alarmLast3Legend').innerHTML = originLegendHtml;
+            // Attach click handlers
+            legendEl.querySelectorAll('.legend-item.clickable').forEach(item => {
+                const g = parseInt(item.dataset.group);
+
+                item.addEventListener('click', () => {
+                    if (activeGroups.size === 1 && activeGroups.has(g)) {
+                        // Already solo, do nothing
+                        return;
+                    }
+                    if (activeGroups.has(g) && activeGroups.size > 1) {
+                        // Click on active item when multiple shown: solo it
+                        activeGroups = new Set([g]);
+                    } else if (!activeGroups.has(g)) {
+                        // Click on inactive item: add it
+                        activeGroups.add(g);
+                    }
+                    applyCombinedVisibility();
+                    refreshCombinedLegendStyles();
+                });
+
+                item.addEventListener('dblclick', () => {
+                    // Double click: show all
+                    activeGroups = new Set(dayGroups.map((_, i) => i));
+                    applyCombinedVisibility();
+                    refreshCombinedLegendStyles();
+                });
+            });
+
+        }
+
+        function applyCombinedVisibility() {
+            dayGroups.forEach((_, g) => {
+                alarmCombinedChart.data.datasets[g].hidden = !activeGroups.has(g);
+            });
+            alarmCombinedChart.update();
+        }
+
+        function refreshCombinedLegendStyles() {
+            document.querySelectorAll('#alarmLegend .legend-item.clickable').forEach(item => {
+                const g = parseInt(item.dataset.group);
+                item.classList.toggle('inactive', !activeGroups.has(g));
+            });
         }
 
         // Area to city indices mapping
@@ -824,10 +845,6 @@ html_content += '''                </select>
         const alarmData = ''' + json.dumps(compact_alarms, ensure_ascii=False) + ''';
 
         let alarmCombinedChart = null;
-        let alarmLast7Chart = null;
-        let alarmLast3Chart = null;
-        const last7Days = days.slice(-7);
-        const last3Days = days.slice(-3);
 
         // Build day groups (chunks of 3) for the all-days combined chart
         const dayGroups = [];
@@ -835,6 +852,7 @@ html_content += '''                </select>
             dayGroups.push(days.slice(i, Math.min(i + 3, days.length)));
         }
         const groupColors = ['#e74c3c', '#3498db', '#f39c12', '#2ecc71', '#9b59b6', '#1abc9c', '#e67e22'];
+        let activeGroups = new Set(dayGroups.map((_, i) => i));
 
         function getDayGroupLabel(group) {
             if (group.length === 1) {
@@ -1018,12 +1036,6 @@ html_content += '''                </select>
             // Initialize combined chart (all days, grouped by 3)
             alarmCombinedChart = createGroupedChart('alarmCombinedChart');
 
-            // Initialize last 7 days chart (stacked by origin)
-            alarmLast7Chart = createOriginStackedChart('alarmLast7Chart');
-
-            // Initialize last 3 days chart (stacked by origin)
-            alarmLast3Chart = createOriginStackedChart('alarmLast3Chart');
-
         }
 
         function createGroupedChart(canvasId) {
@@ -1039,51 +1051,6 @@ html_content += '''                </select>
                         borderColor: groupColors[g % groupColors.length],
                         borderWidth: 1
                     }))
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: {
-                            stacked: true,
-                            ticks: { color: '#aaa' },
-                            grid: { color: 'rgba(255,255,255,0.1)' }
-                        },
-                        y: {
-                            stacked: true,
-                            beginAtZero: true,
-                            ticks: { color: '#aaa' },
-                            grid: { color: 'rgba(255,255,255,0.1)' }
-                        }
-                    }
-                }
-            });
-        }
-
-        function createOriginStackedChart(canvasId) {
-            const ctx = document.getElementById(canvasId).getContext('2d');
-            const knownOrigins = originList.filter(o => o !== '');
-            const datasets = knownOrigins.map(origin => ({
-                label: getOriginName(origin),
-                data: new Array(24).fill(0),
-                backgroundColor: originColors[origin],
-                borderColor: originColors[origin],
-                borderWidth: 1
-            }));
-            datasets.push({
-                label: getOriginName(''),
-                data: new Array(24).fill(0),
-                backgroundColor: originColors[''],
-                borderColor: originColors[''],
-                borderWidth: 1
-            });
-
-            return new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: hours,
-                    datasets: datasets
                 },
                 options: {
                     responsive: true,
@@ -1127,31 +1094,6 @@ html_content += '''                </select>
                 alarmCombinedChart.data.datasets[g].data = merged;
             });
             alarmCombinedChart.update();
-
-            // Helper to update an origin-stacked hourly chart for a subset of days
-            const knownOrigins = originList.filter(o => o !== '');
-            const unknownIdx = originList.indexOf('');
-
-            function updateOriginHourlyChart(chart, daySubset) {
-                const merged = {};
-                originList.forEach((_, idx) => { merged[idx] = new Array(24).fill(0); });
-                daySubset.forEach(day => {
-                    originList.forEach((_, idx) => {
-                        byOrigin[day][idx].forEach((v, h) => merged[idx][h] += v);
-                    });
-                });
-                knownOrigins.forEach((origin, j) => {
-                    const oidx = originList.indexOf(origin);
-                    chart.data.datasets[j].label = getOriginName(origin);
-                    chart.data.datasets[j].data = merged[oidx];
-                });
-                chart.data.datasets[knownOrigins.length].label = getOriginName('');
-                chart.data.datasets[knownOrigins.length].data = merged[unknownIdx];
-                chart.update();
-            }
-
-            updateOriginHourlyChart(alarmLast3Chart, last3Days);
-            updateOriginHourlyChart(alarmLast7Chart, last7Days);
 
             // Update stats
             updateStats(combined);
