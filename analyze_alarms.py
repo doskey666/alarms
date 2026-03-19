@@ -537,7 +537,21 @@ html_content += '''                </select>
 
         <div class="current-filter" id="currentFilterDisplay">הכל</div>
 
-        <div class="stats-table-container" id="alarmStats"></div>
+        <div class="chart-container">
+            <h2 class="chart-title" id="chartTitleLast3">התפלגות שעתית - 3 ימים אחרונים</h2>
+            <div class="chart-wrapper">
+                <canvas id="alarmLast3Chart"></canvas>
+            </div>
+            <div class="legend" id="alarmLast3Legend"></div>
+        </div>
+
+        <div class="chart-container">
+            <h2 class="chart-title" id="chartTitleLast7">התפלגות שעתית - 7 ימים אחרונים</h2>
+            <div class="chart-wrapper">
+                <canvas id="alarmLast7Chart"></canvas>
+            </div>
+            <div class="legend" id="alarmLast7Legend"></div>
+        </div>
 
         <div class="chart-container">
             <h2 class="chart-title" id="chartTitle">התפלגות שעתית - כל הימים</h2>
@@ -546,6 +560,8 @@ html_content += '''                </select>
             </div>
             <div class="legend" id="alarmLegend"></div>
         </div>
+
+        <div class="stats-table-container" id="alarmStats"></div>
 
     </div>
 
@@ -575,6 +591,8 @@ html_content += '''                </select>
                 labelCity: 'עיר:',
                 all: 'הכל',
                 chartTitle: 'התפלגות שעתית - כל הימים',
+                chartTitleLast3: 'התפלגות שעתית - 3 ימים אחרונים',
+                chartTitleLast7: 'התפלגות שעתית - 7 ימים אחרונים',
                 day: 'יום',
                 alarms: 'התרעות',
                 total: 'סה"כ',
@@ -615,6 +633,8 @@ html_content += '''                </select>
                 labelCity: 'City:',
                 all: 'All',
                 chartTitle: 'Hourly Distribution - All Days',
+                chartTitleLast3: 'Hourly Distribution - Last 3 Days',
+                chartTitleLast7: 'Hourly Distribution - Last 7 Days',
                 day: 'Day',
                 alarms: 'Alarms',
                 total: 'Total',
@@ -743,6 +763,8 @@ html_content += '''                </select>
             document.getElementById('labelArea').textContent = t('labelArea');
             document.getElementById('labelCity').textContent = t('labelCity');
             document.getElementById('chartTitle').textContent = t('chartTitle');
+            document.getElementById('chartTitleLast3').textContent = t('chartTitleLast3');
+            document.getElementById('chartTitleLast7').textContent = t('chartTitleLast7');
             document.getElementById('footerSource').textContent = t('footerSource');
             document.getElementById('footerData').innerHTML = t('footerData') + ' <a href="https://github.com/yuval-harpaz/alarms" target="_blank">yuval-harpaz/alarms</a>';
 
@@ -822,6 +844,13 @@ html_content += '''                </select>
                 });
             });
 
+            // Update origin legend for last 3 days
+            const knownOrigins = originList.filter(o => o !== '');
+            const originLegendHtml = [...knownOrigins, ''].map(origin =>
+                `<div class="legend-item"><div class="legend-color" style="background:${originColors[origin]}"></div>${getOriginName(origin)}</div>`
+            ).join('');
+            document.getElementById('alarmLast3Legend').innerHTML = originLegendHtml;
+            document.getElementById('alarmLast7Legend').innerHTML = originLegendHtml;
         }
 
         function applyCombinedVisibility() {
@@ -845,6 +874,10 @@ html_content += '''                </select>
         const alarmData = ''' + json.dumps(compact_alarms, ensure_ascii=False) + ''';
 
         let alarmCombinedChart = null;
+        let alarmLast3Chart = null;
+        let alarmLast7Chart = null;
+        const last3Days = days.slice(-3);
+        const last7Days = days.slice(-7);
 
         // Build day groups (chunks of 3) for the all-days combined chart
         const dayGroups = [];
@@ -1035,7 +1068,8 @@ html_content += '''                </select>
 
             // Initialize combined chart (all days, grouped by 3)
             alarmCombinedChart = createGroupedChart('alarmCombinedChart');
-
+            alarmLast3Chart = createOriginStackedChart('alarmLast3Chart');
+            alarmLast7Chart = createOriginStackedChart('alarmLast7Chart');
         }
 
         function createGroupedChart(canvasId) {
@@ -1073,6 +1107,38 @@ html_content += '''                </select>
             });
         }
 
+        function createOriginStackedChart(canvasId) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            const knownOrigins = originList.filter(o => o !== '');
+            const datasets = knownOrigins.map(origin => ({
+                label: getOriginName(origin),
+                data: new Array(24).fill(0),
+                backgroundColor: originColors[origin],
+                borderColor: originColors[origin],
+                borderWidth: 1
+            }));
+            datasets.push({
+                label: getOriginName(''),
+                data: new Array(24).fill(0),
+                backgroundColor: originColors[''],
+                borderColor: originColors[''],
+                borderWidth: 1
+            });
+            return new Chart(ctx, {
+                type: 'bar',
+                data: { labels: hours, datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { stacked: true, ticks: { color: '#aaa' }, grid: { color: 'rgba(255,255,255,0.1)' } },
+                        y: { stacked: true, beginAtZero: true, ticks: { color: '#aaa' }, grid: { color: 'rgba(255,255,255,0.1)' } }
+                    }
+                }
+            });
+        }
+
         function updateCharts(histogramData, origin, area, city) {
             const { combined, byOrigin } = histogramData;
 
@@ -1085,15 +1151,58 @@ html_content += '''                </select>
             document.getElementById('currentFilterDisplay').textContent = displayName;
 
             // Update combined chart (stacked by day groups)
+            const groupData = [];
             dayGroups.forEach((group, g) => {
                 const merged = new Array(24).fill(0);
                 group.forEach(day => {
                     combined[day].forEach((v, h) => merged[h] += v);
                 });
+                groupData.push(merged);
                 alarmCombinedChart.data.datasets[g].label = getDayGroupLabel(group);
                 alarmCombinedChart.data.datasets[g].data = merged;
             });
+            // Fix Y axis max to the total stacked height (all groups visible)
+            const stackedTotals = new Array(24).fill(0);
+            groupData.forEach(d => d.forEach((v, h) => stackedTotals[h] += v));
+            const yMax = Math.max(...stackedTotals);
+            alarmCombinedChart.options.scales.y.max = yMax > 0 ? yMax + Math.ceil(yMax * 0.1) : undefined;
             alarmCombinedChart.update();
+
+            // Update last 3 days chart (stacked by origin)
+            const knownOrigins = originList.filter(o => o !== '');
+            const unknownIdx = originList.indexOf('');
+            const last3ByOrigin = {};
+            originList.forEach((_, idx) => { last3ByOrigin[idx] = new Array(24).fill(0); });
+            last3Days.forEach(day => {
+                originList.forEach((_, idx) => {
+                    byOrigin[day][idx].forEach((v, h) => last3ByOrigin[idx][h] += v);
+                });
+            });
+            knownOrigins.forEach((origin, j) => {
+                const oidx = originList.indexOf(origin);
+                alarmLast3Chart.data.datasets[j].label = getOriginName(origin);
+                alarmLast3Chart.data.datasets[j].data = last3ByOrigin[oidx];
+            });
+            alarmLast3Chart.data.datasets[knownOrigins.length].label = getOriginName('');
+            alarmLast3Chart.data.datasets[knownOrigins.length].data = last3ByOrigin[unknownIdx];
+            alarmLast3Chart.update();
+
+            // Update last 7 days chart (stacked by origin)
+            const last7ByOrigin = {};
+            originList.forEach((_, idx) => { last7ByOrigin[idx] = new Array(24).fill(0); });
+            last7Days.forEach(day => {
+                originList.forEach((_, idx) => {
+                    byOrigin[day][idx].forEach((v, h) => last7ByOrigin[idx][h] += v);
+                });
+            });
+            knownOrigins.forEach((origin, j) => {
+                const oidx = originList.indexOf(origin);
+                alarmLast7Chart.data.datasets[j].label = getOriginName(origin);
+                alarmLast7Chart.data.datasets[j].data = last7ByOrigin[oidx];
+            });
+            alarmLast7Chart.data.datasets[knownOrigins.length].label = getOriginName('');
+            alarmLast7Chart.data.datasets[knownOrigins.length].data = last7ByOrigin[unknownIdx];
+            alarmLast7Chart.update();
 
             // Update stats
             updateStats(combined);
@@ -1101,21 +1210,21 @@ html_content += '''                </select>
 
         function updateStats(histogram) {
             let total = 0;
-            let rows = '';
-            let prevSum = null;
-            days.forEach((day, i) => {
-                const sum = histogram[day].reduce((a, b) => a + b, 0);
-                total += sum;
+            // Compute sums first (chronological order) for change calculation
+            const sums = days.map(day => histogram[day].reduce((a, b) => a + b, 0));
+            sums.forEach(s => total += s);
 
-                // Calculate change from previous day
+            let rows = '';
+            // Display in reverse order (most recent first)
+            for (let i = days.length - 1; i >= 0; i--) {
+                const sum = sums[i];
                 let changeHtml = '-';
-                if (prevSum !== null && prevSum > 0) {
-                    const pct = ((sum - prevSum) / prevSum * 100).toFixed(0);
-                    const arrow = sum > prevSum ? '↑' : (sum < prevSum ? '↓' : '');
-                    const color = sum > prevSum ? '#e74c3c' : (sum < prevSum ? '#2ed573' : '#aaa');
+                if (i > 0 && sums[i - 1] > 0) {
+                    const pct = ((sum - sums[i - 1]) / sums[i - 1] * 100).toFixed(0);
+                    const arrow = sum > sums[i - 1] ? '↑' : (sum < sums[i - 1] ? '↓' : '');
+                    const color = sum > sums[i - 1] ? '#e74c3c' : (sum < sums[i - 1] ? '#2ed573' : '#aaa');
                     changeHtml = `<span style="color: ${color}">${arrow} ${pct > 0 ? '+' : ''}${pct}%</span>`;
                 }
-                prevSum = sum;
 
                 rows += `
                     <tr>
@@ -1123,7 +1232,7 @@ html_content += '''                </select>
                         <td style="color: ${colors[i % colors.length]}">${sum}</td>
                         <td>${changeHtml}</td>
                     </tr>`;
-            });
+            }
             rows += `
                 <tr>
                     <td><strong>${t('total')}</strong></td>
